@@ -1,19 +1,28 @@
 #include "stdafx.h"
 #include "Kernel.h"
+#include "CServer.h"
 
-bool InitSQL()
+constexpr int INSTANCE_EXISTED = 0xFFFFFFFF;
+constexpr int INIT_FAILED = 0xFFFFFFFE;
+constexpr int INIT_SUCCESS = 0x00000000;
+
+static HSERVER g_hServer = nullptr;
+
+int InitServer()
 {
-	return false;
+	if (g_hServer)
+		return INSTANCE_EXISTED;
+
+	g_hServer = new CServer{};
+	if (g_hServer->Init())
+		return INIT_FAILED;
+
+	return INIT_SUCCESS;
 }
 
-bool InitServer()
+int RunServer()
 {
-	return false;
-}
-
-bool RunServer()
-{
-	return false;
+	return g_hServer->Run();
 }
 
 std::string QueryServer(const char[])

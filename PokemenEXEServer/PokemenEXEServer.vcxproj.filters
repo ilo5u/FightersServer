@@ -44,5 +44,14 @@
     <ClCompile Include="Kernel.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="CDatabase.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CServer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CUserMenager.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

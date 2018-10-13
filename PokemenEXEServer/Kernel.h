@@ -1,10 +1,7 @@
 #pragma once
-#include <string>
 
-bool InitSQL();
+int InitServer();
 
-bool InitServer();
-
-bool RunServer();
+int RunServer();
 
 std::string QueryServer(const char[]);
