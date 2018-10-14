@@ -43,7 +43,24 @@ int CServer::Run()
 	std::thread accept_thread{ std::bind(&CServer::_accept_, this) };
 	accept_thread.detach();
 
+	m_recvEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+	std::thread recv_thread{ std::bind(&CServer::_server_recv_thread_, this) };
+	recv_thread.detach();
+
+	std::thread send_thread{ std::bind(&CServer::_server_send_thread_, this) };
+	send_thread.detach();
+
 	return INIT_SUCCESS;
+}
+
+void CServer::WriteMessage(const Message& message)
+{
+	m_recvMutex.lock();
+
+	m_recvMessageQueue.push(message);
+	SetEvent(m_recvEvent);
+
+	m_recvMutex.unlock();
 }
 
 int CServer::_init_network_()
@@ -105,4 +122,153 @@ void CServer::_accept_()
 		m_userList.push_back(new CUserManager{ connectSocket, clientAddr, this });
 		m_userListMutex.unlock();
 	}
+}
+
+void CServer::_server_control_thread_()
+{
+}
+
+void CServer::_server_recv_thread_()
+{
+	Message message;
+	std::vector<std::string> queryResult;
+	while (true)
+	{
+		WaitForSingleObject(m_recvEvent, 1000);
+		ResetEvent(m_recvEvent);
+		m_recvMutex.lock();
+
+		bool recvValid = false;
+		if (!m_recvMessageQueue.empty())
+		{
+			recvValid = true;
+			message = m_recvMessageQueue.front();
+			m_recvMessageQueue.pop();
+		}
+
+		m_recvMutex.unlock();
+
+		if (recvValid)
+		{
+			switch (message.type)
+			{
+			case Message::Type::CHECK_USER:
+			{
+				std::string queryStr{ "select password from user_launch_info where name=\"" };
+				queryStr += message.data.user_info.name + std::string{ "\""};
+				queryResult = m_hDatabase->Select(queryStr, 1);
+
+				USER_LIST::iterator it = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUSERMANAGER& hUserManager) {
+					return hUserManager->GetID() == message.id;
+				});
+				CUserManager::Packet packet;
+				if (it != m_userList.end())
+				{	// found
+					if (std::strcmp(queryResult[0].c_str(), message.data.user_info.password) == 0)
+					{	// matched
+						m_userListMutex.lock();
+
+						packet.type = CUserManager::Packet::Type::LAUNCH_SUCCESS;
+						(*it)->WritePacket(packet);
+
+						m_userListMutex.unlock();
+					}
+					else
+					{
+						m_userListMutex.lock();
+
+						packet.type = CUserManager::Packet::Type::LAUNCH_FAILED;
+						(*it)->WritePacket(packet);
+
+						m_userListMutex.unlock();
+					}
+				}
+
+				queryResult.clear();
+			}
+			break;
+
+			default:
+				break;
+			}
+		}
+	}
+}
+
+void CServer::_server_send_thread_()
+{
+	while (true)
+	{
+
+	}
+}
+
+CServer::Message::Message()
+{
+}
+
+CServer::Message::Message(const Message& other) :
+	type(other.type)
+{
+	switch (type)
+	{
+	case Type::CHECK_USER:
+		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
+		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+		id = other.id;
+		break;
+
+	default:
+		break;
+	}
+}
+
+CServer::Message::Message(Message&& other) :
+	type(other.type)
+{
+	switch (type)
+	{
+	case Type::CHECK_USER:
+		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
+		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+		id = other.id;
+		break;
+
+	default:
+		break;
+	}
+}
+
+CServer::Message& CServer::Message::operator=(const Message& other)
+{
+	type = other.type;
+	switch (type)
+	{
+	case Type::CHECK_USER:
+		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
+		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+		id = other.id;
+		break;
+
+	default:
+		break;
+	}
+	return *this;
+}
+
+CServer::Message& CServer::Message::operator=(Message && other)
+{
+	type = other.type;
+	switch (type)
+	{
+	case Type::CHECK_USER:
+		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
+		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+		id = other.id;
+		break;
+
+	default:
+		break;
+	}
+	return *this;
 }
