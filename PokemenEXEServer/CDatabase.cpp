@@ -23,26 +23,24 @@ bool CDatabase::Connect(const std::string& user, const std::string& password, co
     return true;
 }
 
-std::vector<std::string> CDatabase::Select(const std::string& query, int valueCnt)
+std::string CDatabase::Select(const std::string& query, int valueCnt)
 {
     MYSQL_RES *sqlResult = NULL;
     MYSQL_ROW sqlRow;
 
-    std::vector<std::string> queryResult;
+    std::string queryResult;
     int iRetVal = mysql_query(&m_mysql, query.c_str());
-    if (iRetVal)
+    if (!iRetVal)
     {
 		sqlResult = mysql_store_result(&m_mysql);
 		if (sqlResult)
 		{
-			std::string rowResult;
 			while (sqlRow = mysql_fetch_row(sqlResult))
 			{
-				rowResult.clear();
+				queryResult.clear();
 				for (int i = 0; i < valueCnt; ++i)
-					rowResult += sqlRow[i] + std::string(",");
+					queryResult += sqlRow[i] + std::string{ "\n" };
 			}
-			queryResult.push_back(rowResult);
 		}
 
     }

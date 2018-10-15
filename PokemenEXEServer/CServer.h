@@ -16,7 +16,8 @@ public:
 	{
 		enum class Type
 		{
-			CHECK_USER
+			CHECK_USER,
+			USER_CLOSED
 		};
 
 		struct UserInfo
@@ -55,6 +56,8 @@ public:
 	int Run();
 
 	void WriteMessage(const Message& message);
+	
+	std::string GetClients() const;
 
 private:
 	HDATABASE m_hDatabase;

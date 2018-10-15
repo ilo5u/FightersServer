@@ -33,7 +33,7 @@
     <ClInclude Include="Kernel.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="NetIO.h">
+    <ClInclude Include="IO.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -54,6 +54,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CUserMenager.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="IO.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

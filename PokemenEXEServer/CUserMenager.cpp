@@ -9,29 +9,47 @@ CUserManager::CUserManager(const SOCKET& connectSocket, const SOCKADDR_IN& clien
 	m_clientRecvThread(nullptr), m_clientSendThread(nullptr)
 {
 	m_clientRecvThread = new std::thread{ std::bind(&CUserManager::_client_recv_thread_, this) };
+	m_clientRecvThread->detach();
+
 	m_clientSendThread = new std::thread{ std::bind(&CUserManager::_client_send_thread_, this) };
+	m_clientSendThread->detach();
 
 	m_sendEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+	m_sendClosedEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+	m_recvClosedEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 }
 
 CUserManager::~CUserManager()
 {
+	WaitForSingleObject(m_recvClosedEvent, INFINITE);
+	WaitForSingleObject(m_sendClosedEvent, INFINITE);
+
+	CloseHandle(m_recvClosedEvent);
+	CloseHandle(m_sendClosedEvent);
+	CloseHandle(m_sendEvent);
+
+	/*
 	if (m_clientSendThread->joinable())
 	{
 		m_clientSendThread->join();
 	}
+	*/
 	delete m_clientSendThread;
 	m_clientSendThread = nullptr;
 
+	/*
 	if (m_clientRecvThread->joinable())
 	{
 		m_clientRecvThread->join();
 	}
+	*/
 	delete m_clientRecvThread;
 	m_clientRecvThread = nullptr;
+
+	closesocket(m_connectSocket);
 }
 
-void CUserManager::WritePacket(const CUserManager::Packet& packet)
+void CUserManager::WritePacket(const Packet& packet)
 {
 	m_sendMutex.lock();
 
@@ -51,23 +69,32 @@ constexpr int DEFAULT_BUFFLEN = 4096;
 void CUserManager::_client_recv_thread_()
 {
 	int iRecvBytes = 0;
-	int iRecvBufLen = sizeof(Packet);
 	Packet recvPacket;
-	while (true)
+
+	char szRecvBuf[BUFLEN];
+	while (!m_isClosed)
 	{
 		// Recive message from client
-		iRecvBufLen = DEFAULT_BUFFLEN;
-		iRecvBytes = recv(m_connectSocket, (char*)&recvPacket, iRecvBufLen, 0);
+		std::memset(szRecvBuf, 0x0, sizeof(szRecvBuf));
+		iRecvBytes = recv(m_connectSocket, szRecvBuf, sizeof(szRecvBuf), 0);
+		
 		if (iRecvBytes > 0)
 		{
+			std::memset(&recvPacket, 0x0, sizeof(recvPacket));
+			sscanf(szRecvBuf, "ID=%d\n", &recvPacket.type);
 			switch (recvPacket.type)
 			{
 			case Packet::Type::LAUNCH_REQUEST:
-			{
+			{				
+				sscanf(szRecvBuf, "ID=%d\nNAME=%s\nPASSWORD=%s\n", &recvPacket.type,
+					&recvPacket.data.user_info.name, &recvPacket.data.user_info.password);
+
+				printf("\nRequest: NAME=%s PASSWORD=%s\n\n>", recvPacket.data.user_info.name, recvPacket.data.user_info.password);
+
 				CServer::Message message;
 				message.type = CServer::Message::Type::CHECK_USER;
-				std::strncpy(message.data.user_info.name, recvPacket.data.user_info.name, NAME_LENGTH);
-				std::strncpy(message.data.user_info.password, recvPacket.data.user_info.password, PASSWORD_LENGTH);
+				std::strncpy(message.data.user_info.name, recvPacket.data.user_info.name, std::strlen(recvPacket.data.user_info.name));
+				std::strncpy(message.data.user_info.password, recvPacket.data.user_info.password, std::strlen(recvPacket.data.user_info.password));
 				message.id = m_clientAddr.sin_addr.S_un.S_addr;
 
 				m_hServer->WriteMessage(message);
@@ -80,24 +107,43 @@ void CUserManager::_client_recv_thread_()
 		}
 		else if (iRecvBytes == 0)
 		{	// close
+			CServer::Message message;
+			message.type = CServer::Message::Type::USER_CLOSED;
+			message.id = m_clientAddr.sin_addr.S_un.S_addr;
+
+			m_hServer->WriteMessage(message);
+
+			m_isClosed = true;
+			SetEvent(m_recvClosedEvent);
 			return;
 		}
 		else
 		{
-			closesocket(m_connectSocket);
+			CServer::Message message;
+			message.type = CServer::Message::Type::USER_CLOSED;
+			message.id = m_clientAddr.sin_addr.S_un.S_addr;
+
+			m_hServer->WriteMessage(message);
+
+			m_isClosed = true;
+			SetEvent(m_recvClosedEvent);
 			return;
 		}
 	}
+
+	SetEvent(m_recvClosedEvent);
 }
 
 void CUserManager::_client_send_thread_()
 {
 	Packet sendPacket;
 	int iSendBytes = 0;
-	int iSendTotal = 0;
-	while (true)
+
+	char szSendBuf[BUFLEN];
+
+	while (!m_isClosed)
 	{
-		WaitForSingleObject(m_sendEvent, 1000);
+		WaitForSingleObject(m_sendEvent, 5000);
 		ResetEvent(m_sendEvent);
 
 		bool sendValid = false;
@@ -112,101 +158,39 @@ void CUserManager::_client_send_thread_()
 
 		m_sendMutex.unlock();
 
-		if (sendValid)
+		if (sendValid && sendPacket.type != Packet::Type::INVALID)
 		{
-			while (iSendTotal < sizeof(Packet))
+			std::memset(szSendBuf, 0x0, sizeof(szSendBuf));
+			switch (sendPacket.type)
 			{
-				iSendBytes = send(m_connectSocket,
-					(char*)&sendPacket + iSendTotal,
-					sizeof(Packet) - iSendTotal,
-					0);
-				if (iSendBytes == SOCKET_ERROR)
-				{
-					closesocket(m_connectSocket);
-					return;
-				}
-				else
-				{
-					iSendTotal += iSendBytes;
-				}
+			case Packet::Type::LAUNCH_SUCCESS:
+			case Packet::Type::LAUNCH_FAILED:
+				sprintf(szSendBuf, "ID=%d\n", sendPacket.type);
+				break;
+
+			default:
+				break;
 			}
 
-			iSendBytes = 0;
-			iSendTotal = 0;
+			iSendBytes = send(m_connectSocket,
+				szSendBuf,
+				std::strlen(szSendBuf) + 1,
+				0);
+
+			if (iSendBytes == SOCKET_ERROR)
+			{
+				CServer::Message message;
+				message.type = CServer::Message::Type::USER_CLOSED;
+				message.id = m_clientAddr.sin_addr.S_un.S_addr;
+
+				m_hServer->WriteMessage(message);
+
+				m_isClosed = true;
+				SetEvent(m_sendClosedEvent);
+				return;
+			}
 		}
 	}
-}
 
-CUserManager::Packet::Packet()
-{
-}
-
-CUserManager::Packet::Packet(const Packet& other) :
-	type(other.type)
-{
-	switch (type)
-	{
-	case Type::LAUNCH_REQUEST:
-	case Type::LAUNCH_SUCCESS:
-	case Type::LAUNCH_FAILED:
-		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
-		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
-		break;
-
-	default:
-		break;
-	}
-}
-
-CUserManager::Packet::Packet(Packet&& other) :
-	type(other.type)
-{
-	switch (type)
-	{
-	case Type::LAUNCH_REQUEST:
-	case Type::LAUNCH_SUCCESS:
-	case Type::LAUNCH_FAILED:
-		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
-		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
-		break;
-
-	default:
-		break;
-	}
-}
-
-CUserManager::Packet& CUserManager::Packet::operator=(const Packet & other)
-{
-	type = other.type;
-	switch (type)
-	{
-	case Type::LAUNCH_REQUEST:
-	case Type::LAUNCH_SUCCESS:
-	case Type::LAUNCH_FAILED:
-		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
-		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
-		break;
-
-	default:
-		break;
-	}
-	return *this;
-}
-
-CUserManager::Packet& CUserManager::Packet::operator=(Packet && other)
-{
-	type = other.type;
-	switch (type)
-	{
-	case Type::LAUNCH_REQUEST:
-	case Type::LAUNCH_SUCCESS:
-	case Type::LAUNCH_FAILED:
-		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
-		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
-		break;
-
-	default:
-		break;
-	}
-	return *this;
+	SetEvent(m_sendClosedEvent);
 }

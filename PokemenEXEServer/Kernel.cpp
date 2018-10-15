@@ -25,7 +25,14 @@ int RunServer()
 	return g_hServer->Run();
 }
 
-std::string QueryServer(const char[])
+std::string QueryServer(const char query[])
 {
-	return std::string();
+	std::string queryResult;
+	if (std::strcmp(query, "show clients\n") == 0)
+	{
+		queryResult = 
+			g_hServer->GetClients();
+	}
+
+	return queryResult;
 }

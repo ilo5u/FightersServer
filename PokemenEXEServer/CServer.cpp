@@ -24,6 +24,7 @@ CServer::CServer() :
 
 CServer::~CServer()
 {
+	WSACleanup();
 	delete m_hDatabase;
 }
 
@@ -63,6 +64,29 @@ void CServer::WriteMessage(const Message& message)
 	m_recvMutex.unlock();
 }
 
+std::string CServer::GetClients() const
+{
+	std::string queryResult;
+	char querySingle[1024];
+	int id = 0;
+	for (USER_LIST::const_iterator it = m_userList.begin();
+		it != m_userList.end(); ++it)
+	{
+		++id;
+		SOCKADDR_IN addr;
+		addr.sin_addr.S_un.S_addr = (*it)->GetID();
+		sprintf(querySingle, "Client %d: ip=%s\n", id, inet_ntoa(addr.sin_addr));
+
+		queryResult += querySingle;
+	}
+
+	if (queryResult.size() == 0)
+	{
+		queryResult = "No clients connected.";
+	}
+	return queryResult;
+}
+
 int CServer::_init_network_()
 {
 	int iRetVal = 0;
@@ -76,7 +100,7 @@ int CServer::_init_network_()
 	if (m_serverSocket == INVALID_SOCKET)
 	{
 		WSACleanup();
-		return WSAGetLastError();
+		return -1;
 	}
 
 	m_serverAddr.sin_family = AF_INET;
@@ -89,7 +113,7 @@ int CServer::_init_network_()
 	{
 		closesocket(m_serverSocket);
 		WSACleanup();
-		return WSAGetLastError();
+		return -1;
 	}
 
 	iRetVal = listen(m_serverSocket, 0);
@@ -97,7 +121,7 @@ int CServer::_init_network_()
 	{
 		closesocket(m_serverSocket);
 		WSACleanup();
-		return WSAGetLastError();
+		return -1;
 	}
 
 	return 0;
@@ -131,10 +155,11 @@ void CServer::_server_control_thread_()
 void CServer::_server_recv_thread_()
 {
 	Message message;
-	std::vector<std::string> queryResult;
+	std::string queryResult;
+	char szQuery[1024];
 	while (true)
 	{
-		WaitForSingleObject(m_recvEvent, 1000);
+		WaitForSingleObject(m_recvEvent, 5000);
 		ResetEvent(m_recvEvent);
 		m_recvMutex.lock();
 
@@ -154,37 +179,56 @@ void CServer::_server_recv_thread_()
 			{
 			case Message::Type::CHECK_USER:
 			{
-				std::string queryStr{ "select password from user_launch_info where name=\"" };
-				queryStr += message.data.user_info.name + std::string{ "\""};
-				queryResult = m_hDatabase->Select(queryStr, 1);
+				sprintf(szQuery, "select password from user_launch_info where name=\"%s\"",
+					message.data.user_info.name);
+				queryResult = m_hDatabase->Select(szQuery, 1);
 
+				if (!queryResult.empty())
+				{
+					char szPassword[1024];
+					sscanf(queryResult.c_str(), "%s\n", szPassword);
+
+					USER_LIST::iterator it = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUSERMANAGER& hUserManager) {
+						return hUserManager->GetID() == message.id;
+					});
+					Packet packet;
+					if (it != m_userList.end())
+					{	// found
+						if (queryResult.empty() || std::strcmp(szPassword, message.data.user_info.password) != 0)
+						{	// not matched
+							m_userListMutex.lock();
+
+							packet.type = Packet::Type::LAUNCH_FAILED;
+							(*it)->WritePacket(packet);
+
+							m_userListMutex.unlock();
+						}
+						else
+						{
+							m_userListMutex.lock();
+
+							packet.type = Packet::Type::LAUNCH_SUCCESS;
+							(*it)->WritePacket(packet);
+
+							m_userListMutex.unlock();
+						}
+					}
+				}
+			}
+			break;
+
+			case Message::Type::USER_CLOSED:
+			{
 				USER_LIST::iterator it = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUSERMANAGER& hUserManager) {
 					return hUserManager->GetID() == message.id;
 				});
-				CUserManager::Packet packet;
 				if (it != m_userList.end())
-				{	// found
-					if (std::strcmp(queryResult[0].c_str(), message.data.user_info.password) == 0)
-					{	// matched
-						m_userListMutex.lock();
+				{
+					delete *it;
+					*it = nullptr;
 
-						packet.type = CUserManager::Packet::Type::LAUNCH_SUCCESS;
-						(*it)->WritePacket(packet);
-
-						m_userListMutex.unlock();
-					}
-					else
-					{
-						m_userListMutex.lock();
-
-						packet.type = CUserManager::Packet::Type::LAUNCH_FAILED;
-						(*it)->WritePacket(packet);
-
-						m_userListMutex.unlock();
-					}
+					m_userList.erase(it);
 				}
-
-				queryResult.clear();
 			}
 			break;
 
@@ -205,6 +249,7 @@ void CServer::_server_send_thread_()
 
 CServer::Message::Message()
 {
+	std::memset(&data, 0x0, sizeof(data));
 }
 
 CServer::Message::Message(const Message& other) :
@@ -215,6 +260,10 @@ CServer::Message::Message(const Message& other) :
 	case Type::CHECK_USER:
 		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
 		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+		id = other.id;
+		break;
+
+	case Type::USER_CLOSED:
 		id = other.id;
 		break;
 
@@ -234,6 +283,10 @@ CServer::Message::Message(Message&& other) :
 		id = other.id;
 		break;
 
+	case Type::USER_CLOSED:
+		id = other.id;
+		break;
+
 	default:
 		break;
 	}
@@ -247,6 +300,10 @@ CServer::Message& CServer::Message::operator=(const Message& other)
 	case Type::CHECK_USER:
 		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
 		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+		id = other.id;
+		break;
+
+	case Type::USER_CLOSED:
 		id = other.id;
 		break;
 
@@ -264,6 +321,10 @@ CServer::Message& CServer::Message::operator=(Message && other)
 	case Type::CHECK_USER:
 		std::strncpy(data.user_info.name, other.data.user_info.name, NAME_LENGTH);
 		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+		id = other.id;
+		break;
+
+	case Type::USER_CLOSED:
 		id = other.id;
 		break;
 

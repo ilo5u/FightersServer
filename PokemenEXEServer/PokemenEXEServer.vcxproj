@@ -153,8 +153,8 @@
     <ClInclude Include="CDatabase.h" />
     <ClInclude Include="CServer.h" />
     <ClInclude Include="CUserMenager.h" />
+    <ClInclude Include="IO.h" />
     <ClInclude Include="Kernel.h" />
-    <ClInclude Include="NetIO.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
   </ItemGroup>
@@ -162,6 +162,7 @@
     <ClCompile Include="CDatabase.cpp" />
     <ClCompile Include="CServer.cpp" />
     <ClCompile Include="CUserMenager.cpp" />
+    <ClCompile Include="IO.cpp" />
     <ClCompile Include="Kernel.cpp" />
     <ClCompile Include="PokemenEXEServer.cpp" />
     <ClCompile Include="stdafx.cpp">
