@@ -1,23 +1,32 @@
 #pragma once
 
-class CDatabase;
-typedef CDatabase * HDATABASE;
+constexpr int USER_NAME_LENGTH = 40;
+typedef char USER_NAME[USER_NAME_LENGTH];
 
-class CUserManager;
-typedef CUserManager * HUSERMANAGER;
+constexpr int PASSWORD_LENGTH = 80;
+typedef char USER_PASSWORD[PASSWORD_LENGTH];
+
+class Database;
+typedef Database * HDATABASE;
+
+class UserManager;
+typedef UserManager * HUSERMANAGER;
 
 typedef typename std::list<HUSERMANAGER> USER_LIST;
 typedef typename std::mutex MUTEX;
 
-class CServer
+class Server
 {
 public:
 	struct Message
 	{
 		enum class Type
 		{
-			CHECK_USER,
-			USER_CLOSED
+			USER_LAUNCH,
+			USER_REGISTER,
+			USER_CLOSED,
+
+			GET_ONLINE_USERS
 		};
 
 		struct UserInfo
@@ -32,7 +41,7 @@ public:
 			UserInfo user_info;
 		};
 		Data data;
-		int id;
+		ULONG id;
 
 		Message();
 		Message(const Message& other);
@@ -42,14 +51,14 @@ public:
 	};
 
 public:
-	CServer();
-	~CServer();
+	Server();
+	~Server();
 
 public:
-	CServer(const CServer&) = delete;
-	CServer(CServer&&) = delete;
-	CServer& operator=(const CServer&) = delete;
-	CServer& operator=(CServer&&) = delete;
+	Server(const Server&) = delete;
+	Server(Server&&) = delete;
+	Server& operator=(const Server&) = delete;
+	Server& operator=(Server&&) = delete;
 
 public:
 	int Init();
@@ -74,12 +83,15 @@ private:
 
 private:
 	int _init_network_();
+	void _deal_with_user_launch_(const Message& message);
+	void _deal_with_user_register_(const Message& message);
+	void _deal_with_user_closed_(const Message& message);
+	void _deal_with_get_online_users_(const Message& message);
 
+private:
 	void _accept_();
-
-	void _server_control_thread_();
 
 	void _server_recv_thread_();
 	void _server_send_thread_();
 };
-typedef CServer * HSERVER;
+typedef Server * HSERVER;

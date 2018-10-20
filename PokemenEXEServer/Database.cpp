@@ -1,18 +1,18 @@
 #include "stdafx.h"
-#include "CDatabase.h"
+#include "Database.h"
 
-CDatabase::CDatabase() :
+Database::Database() :
     m_mysql()
 {
     mysql_init(&m_mysql);
 }
 
-CDatabase::~CDatabase()
+Database::~Database()
 {
     mysql_close(&m_mysql);
 }
 
-bool CDatabase::Connect(const std::string& user, const std::string& password, const std::string& database)
+bool Database::Connect(const std::string& user, const std::string& password, const std::string& database)
 {
     if (mysql_real_connect(&m_mysql, "localhost",
                            user.c_str(), password.c_str(), database.c_str(),
@@ -23,12 +23,21 @@ bool CDatabase::Connect(const std::string& user, const std::string& password, co
     return true;
 }
 
-std::string CDatabase::Select(const std::string& query, int valueCnt)
+bool Database::Insert(const std::string& query)
+{
+	int iRetVal = mysql_query(&m_mysql, query.c_str());
+	if (!iRetVal)
+		return true;
+	return false;
+}
+
+std::vector<std::string> Database::Select(const std::string& query, int valueCnt)
 {
     MYSQL_RES *sqlResult = NULL;
     MYSQL_ROW sqlRow;
 
-    std::string queryResult;
+    std::vector<std::string> queryResult;
+	std::string rowResult;
     int iRetVal = mysql_query(&m_mysql, query.c_str());
     if (!iRetVal)
     {
@@ -37,12 +46,12 @@ std::string CDatabase::Select(const std::string& query, int valueCnt)
 		{
 			while (sqlRow = mysql_fetch_row(sqlResult))
 			{
-				queryResult.clear();
+				rowResult.clear();
 				for (int i = 0; i < valueCnt; ++i)
-					queryResult += sqlRow[i] + std::string{ "\n" };
+					rowResult += sqlRow[i] + std::string{ "\n" };
+				queryResult.push_back(rowResult);
 			}
 		}
-
     }
 
     if (sqlResult != NULL)

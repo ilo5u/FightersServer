@@ -36,6 +36,15 @@
     <ClInclude Include="IO.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="CPokemen.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CPokemenManager.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="RandomGenerator.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -57,6 +66,24 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="IO.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CEaglePlayer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CHedgehogPlayer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CLionPlayer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CPokemenManager.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CPokemenPlayer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CTankPlayer.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

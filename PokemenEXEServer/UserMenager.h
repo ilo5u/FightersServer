@@ -2,22 +2,25 @@
 
 typedef std::thread * HTHREAD;
 
-class CUserManager
+class UserManager
 {
 public:
 
 public:
-	CUserManager(const SOCKET& connectSocket, const SOCKADDR_IN& clientAddr, const HSERVER hServer);
-	~CUserManager();
+	UserManager(const SOCKET& connectSocket, const SOCKADDR_IN& clientAddr, const HSERVER hServer);
+	~UserManager();
 
 public:
 	void WritePacket(const Packet& packet);
-	int GetID() const;
+	ULONG GetID() const;
+	void SetName(const std::string& name);
+	std::string GetName() const;
 
 private:
-	SOCKET m_connectSocket;
-	SOCKADDR_IN m_clientAddr;
-	HSERVER m_hServer;
+	const SOCKET m_connectSocket;
+	const SOCKADDR_IN m_clientAddr;
+	const HSERVER m_hServer;
+	std::string m_userName;
 
 	HTHREAD m_clientRecvThread;
 	HTHREAD m_clientSendThread;
@@ -33,4 +36,4 @@ private:
 	void _client_recv_thread_();
 	void _client_send_thread_();
 };
-typedef CUserManager * HUSERMANAGER;
+typedef UserManager * HUSERMANAGER;

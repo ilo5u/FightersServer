@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "Kernel.h"
-#include "CServer.h"
+#include "Server.h"
 
 constexpr int INSTANCE_EXISTED = 0xFFFFFFFF;
 constexpr int INIT_FAILED = 0xFFFFFFFE;
@@ -13,7 +13,7 @@ int InitServer()
 	if (g_hServer)
 		return INSTANCE_EXISTED;
 
-	g_hServer = new CServer{};
+	g_hServer = new Server{};
 	if (g_hServer->Init())
 		return INIT_FAILED;
 

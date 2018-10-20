@@ -1,9 +1,4 @@
 #pragma once
-constexpr int NAME_LENGTH = 40;
-typedef char USER_NAME[NAME_LENGTH];
-
-constexpr int PASSWORD_LENGTH = 80;
-typedef char USER_PASSWORD[PASSWORD_LENGTH];
 
 constexpr int BUFLEN = 1024;
 
@@ -14,20 +9,30 @@ struct Packet
 		INVALID,
 		LAUNCH_REQUEST,
 		LAUNCH_SUCCESS,
-		LAUNCH_FAILED
+		LAUNCH_FAILED,
+
+		REGISTER_REQUEST,
+		REGISTER_SUCCESS,
+		REGISTER_FAILED,
+
+		DISTRIBUTE_POKEMENS,
+		DISTRIBUTE_A_POKEMEN,
+		INSERT_A_POKEMEN,
+
+		BATTLE_REQUEST,
+
+		UPDATE_POKEMENS,
+		UPDATE_USERS,
+
+		GET_ONLINE_USERS,
+		SET_ONLINE_USERS,
+
+		DISCONNECT
 	};
 
-	struct UserInfo
-	{
-		USER_NAME name;
-		USER_PASSWORD password;
-	};
+	typedef char Data[BUFLEN];
 
 	Type type;
-	union Data
-	{
-		UserInfo user_info;
-	};
 	Data data;
 
 	Packet();
