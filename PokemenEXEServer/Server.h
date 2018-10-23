@@ -26,7 +26,9 @@ public:
 			USER_REGISTER,
 			USER_CLOSED,
 
-			GET_ONLINE_USERS
+			GET_ONLINE_USERS,
+
+			HANDLE_BATTLE_RESULT
 		};
 
 		struct UserInfo
@@ -35,10 +37,27 @@ public:
 			USER_PASSWORD password;
 		};
 
+		struct BattleResult
+		{
+			UserManager::BattleType battleType;
+			int winner;
+			int rounds;
+			int firstId;
+			int secondId;
+		};
+
+		struct PVP
+		{
+			int firstId;
+			int secondId;
+		};
+
 		Type type;
 		union Data
 		{
 			UserInfo user_info;
+			BattleResult battle_result;
+			PVP pvp_info;
 		};
 		Data data;
 		ULONG id;
@@ -87,6 +106,7 @@ private:
 	void _deal_with_user_register_(const Message& message);
 	void _deal_with_user_closed_(const Message& message);
 	void _deal_with_get_online_users_(const Message& message);
+	void _deal_with_battle_result_(const Message& message);
 
 private:
 	void _accept_();

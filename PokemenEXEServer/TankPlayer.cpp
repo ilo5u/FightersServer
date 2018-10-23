@@ -3,7 +3,7 @@
 namespace Pokemen
 {
 	static std::vector<std::string> g_Tankname_Base{ "Bulbasaur", "Ivysaur", "Venusaur", "Charmander" };
-	static char g_wszMessage[1024];
+	static char g_szMessage[BUFLEN];
 
 	/// <summary>
 	/// 
@@ -40,7 +40,7 @@ namespace Pokemen
 	/// </summary>
 	std::string Tank::Attack(HCPokemenPlayer opponent)
 	{
-		std::memset(g_wszMessage, 0x0, sizeof(g_wszMessage));
+		std::memset(g_szMessage, 0x0, sizeof(g_szMessage));
 		// weaken
 		if (this->InState(State::WEAKEN))
 		{
@@ -48,7 +48,7 @@ namespace Pokemen
 			{
 				this->m_attack = this->m_attack_original;
 				this->SubState(State::WEAKEN);
-				std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Released from weaken state. ");
+				sprintf(g_szMessage + std::strlen(g_szMessage), "解除虚弱。");
 			}
 			else
 			{
@@ -56,50 +56,52 @@ namespace Pokemen
 			}
 		}
 
-		if (this->InState(State::DIZZYING)
-			|| this->InState(State::SILENT) 
-			|| this->InState(State::DEAD))
+		if (this->InState(State::DIZZYING) || this->InState(State::DEAD))
 		{
-			std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Give up. ");
 			return false;
 		}
 
+		bool hit      = false;
+		bool critical = false;
+		bool anger    = false;
+		int  skill    = -1;
 		// can or can not hit the target
 		if (_Hit_Target((int16_t)100,
 			(int16_t)_Random(10) + (int16_t)10 * (int16_t)std::sqrt(max(double(this->m_hitratio - this->m_parryratio), 0.0))))
 		{	// hit the target
+			hit = true;
 			int16_t iAT = this->m_attack;
 
 			// critical chance
 			if (_Hit_Target((int16_t)100, this->m_critical))
 			{
-				std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Got a critical-chance. ");
-				iAT = iAT + iAT / 2;
+				critical = true;
+				iAT = static_cast<int16_t>((double)iAT * 1.5);
 			}
 
-			if (this->InState(State::ANGRIED))
+			if (!this->InState(State::SILENT) && this->InState(State::ANGRIED))
 			{
-				std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Be angried. ");
+				anger = true;
+				skill = 2;
 				// release
 				this->m_anger = 0;
 				this->SubState(State::ANGRIED);
 
 				if (this->m_hpoints / (this->m_angried_cnt * this->m_angried_cnt) == 0)
 				{
-					std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Increase the attack value. ");
-					this->m_attack += 3;
+					sprintf(g_szMessage + std::strlen(g_szMessage),
+						"发动狂暴技能：强攻，增加%d点攻击力。", static_cast<int16_t>((double)this->m_attack / 20.0));
+					this->m_attack += static_cast<int16_t>((double)this->m_attack / 20.0);
 				}
 				else
 				{
 					// BUFF
-					std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Healing %d HP. ", std::min<int16_t>(
-						this->m_hpoints_limitation,
-						this->m_hpoints + this->m_hpoints / (this->m_angried_cnt * this->m_angried_cnt)
-						) - this->m_hpoints);
-
+					sprintf(g_szMessage + std::strlen(g_szMessage),
+						"发动狂暴技能：死者苏生，恢复%d点生命值。", 
+						static_cast<int16_t>((double)this->m_hpoints / ((double)this->m_angried_cnt * (double)this->m_angried_cnt)));
 					this->m_hpoints = std::min<int16_t>(
 						this->m_hpoints_limitation,
-						this->m_hpoints + this->m_hpoints / (this->m_angried_cnt * this->m_angried_cnt)
+						this->m_hpoints + static_cast<int16_t>((double)this->m_hpoints / ((double)this->m_angried_cnt * (double)this->m_angried_cnt))
 						);
 					this->m_angried_cnt += 2;
 				}
@@ -107,7 +109,7 @@ namespace Pokemen
 				if (!this->InState(State::WEAKEN))
 				{
 					// weaken
-					std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Be weaken. ");
+					sprintf(g_szMessage + std::strlen(g_szMessage), "狂暴之后进入虚弱状态。");
 
 					this->AddState(State::WEAKEN);
 					this->m_attack_original = this->m_attack;
@@ -123,16 +125,17 @@ namespace Pokemen
 				{
 					if (_Hit_Target((int16_t)100, this->m_skill.m_double_angry_probability))
 					{
-						std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Got buff -- double angry. ");
+						sprintf(g_szMessage + std::strlen(g_szMessage), "发动技能：愤怒，使自身在下次被攻击时获得双倍的狂暴点。");
+
+						skill = 0;
 						this->AddState(State::DBANGRY);
 					}
 					else if (_Hit_Target((int16_t)100, this->m_skill.m_self_healing_probability))
 					{
-						std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Healing %d HP. ", std::min<int16_t>(
-							this->m_hpoints + HealingHpointsCalculator(this->m_hpoints, this->m_skill.m_self_healing_index),
-							this->m_hpoints_limitation
-							) - this->m_hpoints);
+						sprintf(g_szMessage + std::strlen(g_szMessage), "发动技能：治愈，恢复%d点生命值。",
+							HealingHpointsCalculator(this->m_hpoints, this->m_skill.m_self_healing_index));
 
+						skill = 1;
 						this->m_skill.m_self_healing_probability = max((uint16_t)5, this->m_skill.m_self_healing_probability - 1);
 						this->m_skill.m_double_angry_probability = min((uint16_t)30, this->m_skill.m_double_angry_probability + 1);
 
@@ -148,11 +151,10 @@ namespace Pokemen
 				{
 					if (_Hit_Target((int16_t)100, this->m_skill.m_self_healing_probability))
 					{
-						std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Healing %d HP. ", std::min<int16_t>(
-							this->m_hpoints + HealingHpointsCalculator(this->m_hpoints, this->m_skill.m_self_healing_index),
-							this->m_hpoints_limitation
-							) - this->m_hpoints);
+						sprintf(g_szMessage + std::strlen(g_szMessage), "发动技能：治愈，恢复%d点生命值。",
+							HealingHpointsCalculator(this->m_hpoints, this->m_skill.m_self_healing_index));
 
+						skill = 1;
 						this->m_skill.m_self_healing_probability = max((uint16_t)10, this->m_skill.m_self_healing_probability - 1);
 						this->m_skill.m_double_angry_probability = min((uint16_t)20, this->m_skill.m_double_angry_probability + 1);
 
@@ -163,7 +165,9 @@ namespace Pokemen
 					}
 					else if (_Hit_Target((int16_t)100, this->m_skill.m_double_angry_probability))
 					{
-						std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Got buff -- double angry. ");
+						sprintf(g_szMessage + std::strlen(g_szMessage), "发动技能：愤怒，使自身在下次被攻击时获得双倍的狂暴点。");
+
+						skill = 0;
 						this->AddState(State::DBANGRY);
 					}
 				}
@@ -174,11 +178,18 @@ namespace Pokemen
 				}
 
 				// Attack
-				std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Cause %d damage. ", AttackDamageCalculator(iAT, opponent->GetDefense()));
-				this->m_hpoints -= opponent->IsAttacked(AttackDamageCalculator(iAT, opponent->GetDefense()));
+				sprintf(g_szMessage + std::strlen(g_szMessage), "造成%d点伤害。", 
+					AttackDamageCalculator(iAT, opponent->GetDefense()));
+				int16_t damage = opponent->IsAttacked(AttackDamageCalculator(iAT, opponent->GetDefense()));
+				if (damage > 0)
+				{
+					sprintf(g_szMessage + std::strlen(g_szMessage), "受到%d点反伤。", damage);
+					this->m_hpoints -= damage;
+				}
+
 				if (this->m_hpoints <= 0)
 				{
-					std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Be dead!!! ");
+					sprintf(g_szMessage + std::strlen(g_szMessage), "小精灵死亡。");
 					this->m_hpoints = 0;
 					this->m_state = State::DEAD;
 				}
@@ -186,9 +197,12 @@ namespace Pokemen
 		}
 		else
 		{
-			std::sprintf(g_wszMessage + std::strlen(g_wszMessage), "Missed. ");
+			sprintf(g_szMessage + std::strlen(g_szMessage), "未命中。");
 		}
-		return g_wszMessage;
+
+		sprintf(g_szMessage + std::strlen(g_szMessage),
+			"\nHI=%d,CR=%d,AN=%d,SK=%d,ST=%d\n", hit, critical, anger, skill, this->m_state);
+		return g_szMessage;
 	}
 
 	/// <summary>

@@ -16,6 +16,7 @@ namespace Pokemen
 		virtual ~PokemenManager();
 
 	public:
+		int GetID() const;
 		std::string GetName() const;
 
 		int GetHpoints() const;
@@ -33,6 +34,7 @@ namespace Pokemen
 		int GetExp() const;
 
 	public:
+		int SetID(int id);
 		bool SetName(const std::string& name);
 
 		bool SetHpoints(int hpoints);
@@ -75,24 +77,33 @@ namespace Pokemen
 		virtual ~BattleStage();
 
 	public:
-		void AddPlayer(const PokemenManager& player_1, const PokemenManager& player_2);
+		void AddPlayer(const PokemenManager& first_player, const PokemenManager& second_player);
 		void Start();
 		void Pause();
 		void GoOn();
+		void Clear();
+		bool IsRunning() const;
+		int  GetRoundCnt() const;
+
+		int GetFirstPlayerId() const;
+		int GetSecondPlayerId() const;
 
 		BattleMessage ReadMessage();
 
-		PokemenManager GetPlayer_1();
-		PokemenManager GetPlayer_2();
-
 	private:
-		PokemenManager m_player_1;
-		PokemenManager m_player_2;
+		PokemenManager m_first_player;
+		PokemenManager m_second_player;
 		std::queue<BattleMessage> m_message_queue;
 		std::mutex m_message_mutex;
 		HANDLE m_message_event;
 		HANDLE m_on_off_event;
+		std::thread m_battle_thread;
 
+	private:
+		int m_round_cnt;
+
+	private:
+		bool m_is_battle_on_running;
 		void __run_battle__();
 	};
 }

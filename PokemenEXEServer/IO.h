@@ -1,6 +1,6 @@
 #pragma once
 
-constexpr int BUFLEN = 1024;
+constexpr int BUFLEN = 2048;
 
 struct Packet
 {
@@ -20,6 +20,8 @@ struct Packet
 		INSERT_A_POKEMEN,
 
 		BATTLE_REQUEST,
+		BATTLE_MESSAGE,
+		BATTLE_RESULT,
 
 		UPDATE_POKEMENS,
 		UPDATE_USERS,

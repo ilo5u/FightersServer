@@ -28,6 +28,11 @@ namespace Pokemen
 	{
 	}
 
+	int PokemenProperty::GetID() const
+	{
+		return m_id;
+	}
+
 	std::string PokemenProperty::GetName() const
 	{
 		return m_name;
@@ -86,6 +91,12 @@ namespace Pokemen
 	int16_t PokemenProperty::GetExp() const
 	{
 		return m_exp;
+	}
+
+	bool PokemenProperty::SetID(int id)
+	{
+		m_id = id;
+		return false;
 	}
 
 	bool PokemenProperty::SetName(const std::string& name)

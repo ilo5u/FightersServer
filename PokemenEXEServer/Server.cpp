@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "Database.h"
-#include "PokemenManager.h"
 
 #include <thread>
 
@@ -102,7 +101,7 @@ int Server::_init_network_()
 	}
 
 	m_serverAddr.sin_family = AF_INET;
-	m_serverAddr.sin_addr.S_un.S_addr = inet_addr("10.201.6.227");
+	m_serverAddr.sin_addr.S_un.S_addr = inet_addr("10.201.6.239");
 	m_serverAddr.sin_port = htons(PORT);
 
 	iRetVal = bind(m_serverSocket, (LPSOCKADDR)&m_serverAddr,
@@ -167,9 +166,9 @@ void Server::_deal_with_user_launch_(const Message& message)
 			// 后续反馈登陆成功后用户的相关信息
 			if (packet.type == Packet::Type::LAUNCH_SUCCESS)
 			{
-				sprintf(szQuery, "select pokemen_property from user_pokemen_info where user_name='%s'",
+				sprintf(szQuery, "select identity,pokemen_property from user_pokemen_info where user_name='%s'",
 					message.data.user_info.name);
-				queryResult = m_hDatabase->Select(szQuery, 1);
+				queryResult = m_hDatabase->Select(szQuery, 2);
 
 				if (queryResult.size() == 0)
 				{	// 用户没有小精灵
@@ -178,45 +177,43 @@ void Server::_deal_with_user_launch_(const Message& message)
 
 					(*it_user)->WritePacket(packet);
 
-					packet.type = Packet::Type::INSERT_A_POKEMEN;
 					for (int i = 0; i < 3; ++i)
 					{
 						Pokemen::PokemenManager newPokemen(Pokemen::PokemenType::DEFAULT);
-						sprintf(packet.data, "NAME=%s,TY=%d,HP=%d,AT=%d,DE=%d,AG=%d,BR=%d,CR=%d,HI=%d,PA=%d",
+						sprintf(szQuery,
+							"insert into user_pokemen_info(pokemen_property,user_name) values('NAME=%s,TY=%d,HP=%d,AT=%d,DE=%d,AG=%d,BR=%d,CR=%d,HI=%d,PA=%d,EX=%d,LE=%d','%s')",
 							newPokemen.GetName().c_str(),
 							(int)newPokemen.GetType(),
 							newPokemen.GetHpoints(), newPokemen.GetAttack(), newPokemen.GetDefense(), newPokemen.GetAgility(),
-							newPokemen.GetBreak(), newPokemen.GetCritical(), newPokemen.GetHitratio(), newPokemen.GetParryratio()
-						);
-
-						sprintf(szQuery,
-							"insert into user_pokemen_info(pokemen_property,user_name) values('%s','%s')",
-							packet.data,
+							newPokemen.GetBreak(), newPokemen.GetCritical(), newPokemen.GetHitratio(), newPokemen.GetParryratio(),
+							newPokemen.GetExp(), newPokemen.GetLevel(),
 							message.data.user_info.name
 						);
-						if (m_hDatabase->Insert(szQuery))
-							(*it_user)->WritePacket(packet);
+						m_hDatabase->Insert(szQuery);
 					}
+					// 重新查询小精灵情况 获取ID值
+					sprintf(szQuery, "select identity,pokemen_property from user_pokemen_info where user_name='%s'",
+						message.data.user_info.name);
+					queryResult = m_hDatabase->Select(szQuery, 2);
 				}
-				else
+
+				packet.type = Packet::Type::INSERT_A_POKEMEN;
+				for (std::vector<std::string>::const_iterator it_result = queryResult.begin();
+					it_result != queryResult.end(); ++it_result)
 				{
-					packet.type = Packet::Type::INSERT_A_POKEMEN;
-					for (std::vector<std::string>::const_iterator it_result = queryResult.begin();
-						it_result != queryResult.end(); ++it_result)
-					{
-						sprintf(packet.data, "%s\n", it_result->c_str());
-						(*it_user)->WritePacket(packet);
-					}
+					sprintf(packet.data, "%s", it_result->c_str());
+					(*it_user)->InsertAPokemen(*it_result);
+					(*it_user)->WritePacket(packet);
 				}
 
 				packet.type = Packet::Type::UPDATE_USERS;
 				sprintf(packet.data, "NAME=%s,STATE=ON\n", (*it_user)->GetName().c_str());
-				for (USER_LIST::const_iterator it = m_userList.begin();
-					it != m_userList.end(); ++it)
+				for (USER_LIST::const_iterator it_other = m_userList.begin();
+					it_other != m_userList.end(); ++it_other)
 				{
-					if (it == it_user)
+					if (it_other == it_user)
 						continue;
-					(*it)->WritePacket(packet);
+					(*it_other)->WritePacket(packet);
 				}
 			}
 		}
@@ -323,6 +320,10 @@ void Server::_deal_with_get_online_users_(const Message& message)
 	m_userListMutex.unlock();
 }
 
+void Server::_deal_with_battle_result_(const Message& message)
+{
+}
+
 void Server::_accept_()
 {
 	SOCKADDR_IN clientAddr;
@@ -394,6 +395,12 @@ void Server::_server_recv_thread_()
 			case Message::Type::GET_ONLINE_USERS:
 			{
 				_deal_with_get_online_users_(message);
+			}
+			break;
+
+			case Message::Type::HANDLE_BATTLE_RESULT:
+			{
+				_deal_with_battle_result_(message);
 			}
 			break;
 

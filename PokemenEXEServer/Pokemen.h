@@ -27,6 +27,7 @@ namespace Pokemen
 		PokemenProperty& operator=(const PokemenProperty&) = delete;
 
 	public:
+		int GetID() const;
 		std::string GetName() const;
 
 		int16_t GetHpoints() const;
@@ -45,6 +46,7 @@ namespace Pokemen
 		int16_t GetExp() const;
 
 	public:
+		bool SetID(int id);
 		bool SetName(const std::string& name);
 
 		bool SetHpoints(int16_t hpoints);
@@ -97,6 +99,7 @@ namespace Pokemen
 		static int16_t BloodingDamageCalculator(int16_t primary_affect, int16_t secondary_affect);
 
 	protected:
+		int m_id;
 		std::string m_name;
 
 		int16_t	m_hpoints;
