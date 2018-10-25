@@ -2,24 +2,24 @@
 
 namespace Pokemen
 {
-	static std::vector<std::string> g_Strengthname_Base{ "Charizard", "Squirtle", "Wartortle", "Blastoise" };
+	static const Strings NamesOfLion{ "Charizard", "Squirtle", "Wartortle", "Blastoise" };
 
 	/// <summary>
 	/// 
 	/// </summary>
-	Lion::Lion(Skill::Type primary_skill, int level) :
+	Lion::Lion(Skill::Type primarySkill, int level) :
 		BasePlayer(
-			g_Strengthname_Base[_Random(g_Strengthname_Base.size())],
-			hitpoints_base + _Random(property_offset),
-			attack_base + _Random(property_offset),
-			defense_base + _Random(property_offset),
-			agility_base + _Random(property_offset),
+			NamesOfLion[_Random(NamesOfLion.size())],
+			hitpointsBase + _Random(propertyOffset),
+			attackBase + _Random(propertyOffset),
+			defenseBase + _Random(propertyOffset),
+			agilityBase + _Random(propertyOffset),
 			PokemenType::LION
 		),
-		m_skill(primary_skill)
+		m_skill(primarySkill)
 	{
-		while (this->m_level < min(level, level_limitation))
-			Update(exp_base);
+		while (this->m_level < std::min<Value>(level, levelLimitation))
+			Update(expBase);
 	}
 
 	/// <summary>
@@ -29,25 +29,25 @@ namespace Pokemen
 	{
 	}
 
-	Lion::Skill::Skill(Type primary_skill)
+	Lion::Skill::Skill(Type primarySkill)
 	{
-		m_primary_skill = primary_skill;
+		m_primarySkill = primarySkill;
 	}
 
 	/// <summary>
 	/// 
 	/// </summary>
-	std::string Lion::Attack(BasePlayer& opponent)
+	String Lion::Attack(BasePlayer& opponent)
 	{
-		return false;
+		return { };
 	}
 
-	int16_t Lion::IsAttacked(int16_t damage)
+	Value Lion::IsAttacked(Value damage)
 	{
-		return int16_t();
+		return Value();
 	}
 
-	bool Lion::SetPrimarySkill(Skill::Type skill)
+	bool Lion::SetPrimarySkill(Skill::Type primarySkill)
 	{
 		return false;
 	}

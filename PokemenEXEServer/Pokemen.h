@@ -5,6 +5,9 @@
 /// </summary>
 namespace Pokemen
 {
+	/// <summary>
+	/// 
+	/// </summary>
 	enum class PokemenType
 	{
 		DEFAULT,
@@ -14,133 +17,141 @@ namespace Pokemen
 		EAGLE
 	};
 
+	typedef int16_t             Value;
+	typedef std::string         String;
+	typedef std::vector<String> Strings;
+
 	/// <summary>
 	/// 
 	/// </summary>
 	class PokemenProperty
 	{
 	public:
-		PokemenProperty(std::string name, int16_t hitpoints, int16_t attack, int16_t defense, int16_t agility, PokemenType type);
+		PokemenProperty(String name, Value hitpoints, Value attack, Value defense, Value agility, PokemenType type);
 		PokemenProperty(const PokemenProperty&) = default;
 		virtual ~PokemenProperty();
 
 		PokemenProperty& operator=(const PokemenProperty&) = delete;
 
 	public:
+		// 获取属性值
 		int GetID() const;
-		std::string GetName() const;
+		String GetName() const;
 
-		int16_t GetHpoints() const;
-		int16_t GetAttack() const;
-		int16_t GetDefense() const;
-		int16_t GetAgility() const;
+		Value GetHpoints() const;
+		Value GetAttack() const;
+		Value GetDefense() const;
+		Value GetAgility() const;
 
-		int16_t GetBreak() const;
-		int16_t GetCritical() const;
-		int16_t GetHitratio() const;
-		int16_t GetParryratio() const;
+		Value GetBreak() const;
+		Value GetCritical() const;
+		Value GetHitratio() const;
+		Value GetParryratio() const;
 
 		PokemenType GetType() const;
 
-		int16_t GetLevel() const;
-		int16_t GetExp() const;
+		Value GetExp() const;
+		Value GetLevel() const;
 
 	public:
+		// 设置属性值
 		bool SetID(int id);
-		bool SetName(const std::string& name);
+		bool SetName(const String& name);
 
-		bool SetHpoints(int16_t hpoints);
-		bool SetAttack(int16_t attack);
-		bool SetDefense(int16_t defense);
-		bool SetAgility(int16_t agility);
+		bool SetHpoints(Value hpoints);
+		bool SetAttack(Value attack);
+		bool SetDefense(Value defense);
+		bool SetAgility(Value agility);
 
-		bool SetBreak(int16_t brea);
-		bool SetCritical(int16_t critical);
-		bool SetHitratio(int16_t hitratio);
-		bool SetParryratio(int16_t parryratio);
+		bool SetBreak(Value brea);
+		bool SetCritical(Value critical);
+		bool SetHitratio(Value hitratio);
+		bool SetParryratio(Value parryratio);
 
-		bool SetLevel(int16_t level);
-		bool SetExp(int16_t exp);
-
-	protected:
-		/// <summary>
-		/// 
-		/// </summary>
-		static int16_t BreakValueCalculator(int16_t base, int16_t primary_affect, int16_t secondary_affect);
-
-		/// <summary>
-		/// 
-		/// </summary>
-		static int16_t CriticalValueCalculator(int16_t base, int16_t affect);
-
-		/// <summary>
-		/// 
-		/// </summary>
-		static int16_t HitratioValueCalculator(int16_t base, int16_t primary_affect, int16_t secondary_affect);
-
-		/// <summary>
-		/// 
-		/// </summary>
-		static int16_t ParryratioValueCalculator(int16_t base, int16_t primary_affect, int16_t secondary_affect);
-
-		/// <summary>
-		/// 
-		/// </summary>
-		static int16_t AttackDamageCalculator(int16_t primary_affect, int16_t secondary_affect);
-
-		/// <summary>
-		/// 
-		/// </summary>
-		static int16_t HealingHpointsCalculator(int16_t primary_affect, int16_t secondary_affect);
-
-		/// <summary>
-		/// 
-		/// </summary>
-		static int16_t BloodingDamageCalculator(int16_t primary_affect, int16_t secondary_affect);
+		bool SetExp(Value exp);
+		bool SetLevel(Value level);
 
 	protected:
-		int m_id;
-		std::string m_name;
+		/// <summary>
+		/// 
+		/// </summary>
+		static Value BreakValueCalculator(Value base, Value primary_affect, Value secondary_affect);
 
-		int16_t	m_hpoints;
-		int16_t	m_attack;
-		int16_t	m_defense;
-		int16_t	m_agility;
+		/// <summary>
+		/// 
+		/// </summary>
+		static Value CriticalValueCalculator(Value base, Value affect);
 
-		int16_t	m_break;
-		int16_t	m_critical;
-		int16_t	m_hitratio;
-		int16_t	m_parryratio;
+		/// <summary>
+		/// 
+		/// </summary>
+		static Value HitratioValueCalculator(Value base, Value primary_affect, Value secondary_affect);
 
+		/// <summary>
+		/// 
+		/// </summary>
+		static Value ParryratioValueCalculator(Value base, Value primary_affect, Value secondary_affect);
+
+		/// <summary>
+		/// 
+		/// </summary>
+		static Value AttackDamageCalculator(Value primary_affect, Value secondary_affect);
+
+		/// <summary>
+		/// 
+		/// </summary>
+		static Value HealingHpointsCalculator(Value primary_affect, Value secondary_affect);
+
+		/// <summary>
+		/// 
+		/// </summary>
+		static Value BloodingDamageCalculator(Value primary_affect, Value secondary_affect);
+
+	protected:
+		// 唯一标识
+		int         m_id;
 		PokemenType m_type;
+		String      m_name;
 
-		int16_t m_level;
-		int16_t m_exp;
+		// 属性
+		Value m_hpoints;
+		Value m_attack;
+		Value m_defense;
+		Value m_agility;
+
+		Value m_break;
+		Value m_critical;
+		Value m_hitratio;
+		Value m_parryratio;
+
+		Value m_exp;
+		Value m_level;
 
 	protected:
 		// common initializing data part
-		static const int16_t property_offset = 4;
+		static const Value propertyOffset = 4;
 
-		static const int16_t break_base = 1000;
-		static const int16_t critical_base = 20;
-		static const int16_t hitratio_base = 90;
-		static const int16_t parryratio_base = 10;
-		static const int16_t anger_limitation_base = 100;
+		static const Value breakBase      = 1000;
+		static const Value criticalBase   = 20;
+		static const Value hitratioBase   = 90;
+		static const Value parryratioBase = 10;
 
-		static const int16_t anger_increase_base = 10;
+		static const Value angerIncrementBase = 10;
+		static const Value bloodingDamageBase = 20;
 
-		static const int16_t blooding_damage_base = 20;
+		static const Value expBase            = 1000;
+		static const Value hpointsLevelupBase = 100;
+		static const Value levelupPropertiesIncrementBase = 21;
 
-		static const int16_t blooding_circles_base = 3;
-		static const int16_t weaken_circles_base = 3;
-		static const int16_t dizzy_circles_base = 3;
-		static const int16_t sounder_circles_base = 3;
+		static const Value bloodingRoundsBase = 5;
+		static const Value weakenRoundsBase   = 3;
+		static const Value dizzyRoundsBase    = 4;
+		static const Value sounderRoundsBase  = 4;
+		static const Value silentRoundsBase   = 2;
 
 		// common updating data part
-		static const int16_t level_limitation = 15;
-		static const int16_t exp_base = 1000;
-		static const int16_t hpoints_levelup_base = 100;
-		static const int16_t levelup_property_increased = 21;
+		static const Value angerLimitation = 100;
+		static const Value levelLimitation = 15;
 	};
 
 	/// <summary>
@@ -154,39 +165,39 @@ namespace Pokemen
 		/// </summary>
 		enum class State
 		{
-			NORMAL = 0x0001,
-			ANGRIED = 0x0002,
-			DBANGRY = 0x0004,
-			WEAKEN = 0x0008,
+			NORMAL     = 0x0001,
+			ANGRIED    = 0x0002,
+			DBANGRY    = 0x0004,
+			WEAKEN     = 0x0008,
 
-			SUNDERED = 0x0010,
-			DIZZYING = 0x0020,
+			SUNDERED   = 0x0010,
+			DIZZYING   = 0x0020,
 
-			SILENT = 0x0040,
+			SILENT     = 0x0040,
 			REBOUNDING = 0x0080,
 
-			BLOODING = 0x0100,
-			SLOWED = 0x0200,
-			DEAD = 0x0400,
-			MASK = 0xFFFF
+			BLOODING   = 0x0100,
+			SLOWED     = 0x0200,
+			DEAD       = 0x0400,
+			MASK       = 0xFFFF
 		};
 
 		struct SkillBase { };
 
 	public:
-		bool InState(BasePlayer::State inState) const;
-		bool AddState(BasePlayer::State newState);
-		bool SubState(BasePlayer::State oldState);
+		bool InState(State inState) const;
+		bool AddState(State newState);
+		bool SubState(State oldState);
 
 	public:
-		BasePlayer(std::string name, int16_t hitpoints, int16_t attack, int16_t defense, int16_t agility, PokemenType type);
+		BasePlayer(String name, Value hitpoints, Value attack, Value defense, Value agility, PokemenType type);
 		virtual ~BasePlayer();
 
 	public:
 		typedef BasePlayer * HCPokemenPlayer;
-		virtual std::string Attack(HCPokemenPlayer oppoent);
-		virtual int16_t IsAttacked(int16_t damage);
-		virtual bool SetPrimarySkill(const SkillBase& skill);
+		virtual String Attack(HCPokemenPlayer oppoent);
+		virtual Value  IsAttacked(Value damage);
+		virtual bool   SetPrimarySkill(const SkillBase& skill);
 
 	public:
 		bool SetAnger(int anger);
@@ -194,25 +205,26 @@ namespace Pokemen
 
 	public:
 		State GetState() const;
-		int16_t GetAnger() const;
+		Value GetAnger() const;
 
 	protected:
-		State	m_state;
-		int16_t	m_anger;
-		int16_t m_hpoints_limitation;
-		int16_t m_attack_original;
-		int16_t m_defense_original;
-		int16_t m_agility_original;
+		State m_state;
+		Value m_anger;
+		Value m_hpointsLimitation;
+		Value m_attackOriginal;
+		Value m_defenseOriginal;
+		Value m_agilityOriginal;
 
 	protected:
-		int16_t m_weaken_circles_cnt;
-		int16_t m_blooding_circles_cnt;
-		int16_t m_sundered_circles_cnt;
-		int16_t m_slowed_circles_cnt;
-		int16_t m_silent_circles_cnt;
+		Value m_dizzyRoundsCnt;
+		Value m_bloodingRoundsCnt;
+		Value m_weakenRoundsCnt;
+		Value m_sunderedRoundsCnt;
+		Value m_slowedRoundsCnt;
+		Value m_silentRoundsCnt;
 
 	protected:
-		virtual void _level_up_property_distribution();
+		virtual void _LevelUpPropertiesDistributor_();
 	};
 	typedef BasePlayer * PBasePlayer;
 
@@ -230,39 +242,39 @@ namespace Pokemen
 				SELF_HEALING,
 				REBIRTH
 			};
-			Type    m_primary_skill;
-			int16_t m_double_angry_probability = 10;
-			int16_t m_self_healing_probability = 30;
+			Type  m_primarySkill;
+			Value m_doubleAngryProbability = 10;
+			Value m_selfHealingProbability = 30;
 
-			int16_t m_self_healing_index = 20;
+			Value m_selfHealingIndex = 20;
 
-			static const Type main_skill = Type::REBIRTH;
-			int16_t m_weaken_index = 50;
+			static const Type  mainSkill     = Type::REBIRTH;
+			             Value m_weakenIndex = 50;
 
-			Skill(Type primary_skill);
+			Skill(Type primarySkill);
 		};
 
 	public:
-		Tank(Skill::Type primary_skill, int level = 1);
+		Tank(Skill::Type primarySkill, int level = 1);
 		virtual ~Tank();
 
 	public:
-		std::string Attack(HCPokemenPlayer opponent);
-		int16_t     IsAttacked(int16_t damage);
-		bool        SetPrimarySkill(Skill::Type primary_skill);
+		String Attack(HCPokemenPlayer opponent);
+		Value  IsAttacked(Value damage);
+		bool   SetPrimarySkill(Skill::Type primarySkill);
 
 	private:
-		Skill   m_skill;
-		int16_t m_angried_cnt = 1;
+		Skill m_skill;
+		Value m_angriedCnt = 1;
 
 	private:
-		void _level_up_property_distribution();
+		void _LevelUpPropertiesDistributor_();
 
 	private:
-		static const int16_t hitpoints_base = 480;
-		static const int16_t attack_base    = 36;
-		static const int16_t defense_base   = 38;
-		static const int16_t agility_base   = 24;
+		static const Value hitpointsBase = 480;
+		static const Value attackBase    = 36;
+		static const Value defenseBase   = 38;
+		static const Value agilityBase   = 24;
 	};
 	typedef Tank * PTankPlayer;
 
@@ -280,35 +292,35 @@ namespace Pokemen
 				MAKE_DIZZY,
 				AVATAR
 			};
-			Type    m_primary_skill;
-			int16_t m_sunder_arm_probability = 20;
-			int16_t m_make_dizzy_probability = 40;
+			Type  m_primarySkill;
+			Value m_sunderArmProbability = 20;
+			Value m_makeDizzyProbability = 40;
 
-			int16_t m_sunder_arm_index = 50;
+			Value m_sunderArmIndex = 50;
 
-			static const Type main_skill = Type::AVATAR;
-			int16_t m_strengthen_index = 200;
+			static const Type mainSkill          = Type::AVATAR;
+			             Value m_strengthenIndex = 200;
 
-			Skill(Type primary_skill);
+			Skill(Type primarySkill);
 		};
 
 	public:
-		Lion(Skill::Type primary_skill, int level = 1);
+		Lion(Skill::Type primarySkill, int level = 1);
 		virtual ~Lion();
 
 	public:
-		std::string Attack(BasePlayer& opponent);
-		int16_t IsAttacked(int16_t damage);
-		bool SetPrimarySkill(Skill::Type skill);
+		String Attack(BasePlayer& opponent);
+		Value  IsAttacked(Value damage);
+		bool   SetPrimarySkill(Skill::Type skill);
 
 	private:
 		Skill m_skill;
 
 	private:
-		static const int16_t	hitpoints_base = 360;
-		static const int16_t	attack_base    = 60;
-		static const int16_t	defense_base   = 48;
-		static const int16_t	agility_base   = 36;
+		static const Value	hitpointsBase = 360;
+		static const Value	attackBase    = 60;
+		static const Value	defenseBase   = 48;
+		static const Value	agilityBase   = 36;
 	};
 	typedef Lion * PLionPlayer;
 
@@ -326,35 +338,35 @@ namespace Pokemen
 				REBOUND_DAMAGE,
 				ARMOR
 			};
-			Type    m_primary_skill;
-			int16_t m_sunk_in_silence_probability = 10;
-			int16_t m_rebound_damage_probability = 60;
+			Type  m_primarySkill;
+			Value m_sunkInSilenceProbability = 10;
+			Value m_reboundDamageProbability = 60;
 
-			int16_t m_rebound_damage_index = 30;
+			Value m_reboundDamageIndex = 30;
 
-			static const Type main_skill = Type::ARMOR;
-			int16_t m_defensen_index = 400;
+			static const Type mainSkill = Type::ARMOR;
+			Value m_defenseIndex = 400;
 
-			Skill(Type primary_skill);
+			Skill(Type primarySkill);
 		};
 
 	public:
-		Hedgehog(Skill::Type primary_skill, int level = 1);
+		Hedgehog(Skill::Type primarySkill, int level = 1);
 		virtual ~Hedgehog();
 
 	public:
-		std::string Attack(BasePlayer& opponent);
-		int16_t IsAttacked(int16_t damage);
-		bool SetPrimarySkill(Skill::Type primary_skill);
+		String Attack(BasePlayer& opponent);
+		Value  IsAttacked(Value damage);
+		bool   SetPrimarySkill(Skill::Type primarySkill);
 
 	private:
 		Skill m_skill;
 
 	private:
-		static const int16_t	hitpoints_base = 420;
-		static const int16_t	attack_base    = 36;
-		static const int16_t	defense_base   = 60;
-		static const int16_t	agility_base   = 24;
+		static const Value	hitpointsBase = 420;
+		static const Value	attackBase    = 36;
+		static const Value	defenseBase   = 60;
+		static const Value	agilityBase   = 24;
 	};
 	typedef Hedgehog * PHedgehogPlayer;
 
@@ -372,36 +384,36 @@ namespace Pokemen
 				SLOW,
 				INSPIRE
 			};
-			Type    m_primary_skill;
-			int16_t m_tearing_probability = 30;
-			int16_t m_slow_probability = 10;
+			Type  m_primarySkill;
+			Value m_tearingProbability = 30;
+			Value m_slowProbability    = 10;
 
-			int16_t m_slow_index = 200;
+			Value m_slowIndex = 200;
 
-			static const Type main_skill = Type::INSPIRE;
-			int16_t m_fasten_index = 50;
-			int16_t m_stolen_index = 50;
+			static const Type mainSkill = Type::INSPIRE;
+			Value m_fastenIndex = 50;
+			Value m_stolenIndex = 50;
 
-			Skill(Type primary_skill);
+			Skill(Type primarySkill);
 		};
 
 	public:
-		Eagle(Skill::Type primary_skill, int level = 1);
+		Eagle(Skill::Type primarySkill, int level = 1);
 		virtual ~Eagle();
 
 	public:
-		std::string Attack(BasePlayer& opponent);
-		int16_t IsAttacked(int16_t damage);
-		bool SetPrimarySkill(Skill::Type primary_skill);
+		String Attack(BasePlayer& opponent);
+		Value  IsAttacked(Value damage);
+		bool   SetPrimarySkill(Skill::Type primarySkill);
 
 	private:
 		Skill m_skill;
 
 	private:
-		static const int16_t hitpoints_base = 400;
-		static const int16_t attack_base    = 48;
-		static const int16_t defense_base   = 24;
-		static const int16_t agility_base   = 60;
+		static const Value hitpointsBase = 400;
+		static const Value attackBase    = 48;
+		static const Value defenseBase   = 24;
+		static const Value agilityBase   = 60;
 	};
 	typedef Eagle * PEaglePlayer;
 }

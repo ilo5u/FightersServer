@@ -2,6 +2,10 @@
 
 namespace Pokemen
 {
+	typedef std::string String;
+	typedef std::mutex  Mutex;
+	typedef std::thread Thread;
+
 	/// <summary>
 	/// 
 	/// </summary>
@@ -17,7 +21,7 @@ namespace Pokemen
 
 	public:
 		int GetID() const;
-		std::string GetName() const;
+		String GetName() const;
 
 		int GetHpoints() const;
 		int GetAttack() const;
@@ -35,7 +39,7 @@ namespace Pokemen
 
 	public:
 		int SetID(int id);
-		bool SetName(const std::string& name);
+		bool SetName(const String& name);
 
 		bool SetHpoints(int hpoints);
 		bool SetAttack(int attack);
@@ -56,7 +60,7 @@ namespace Pokemen
 		bool InState(BasePlayer::State nowState) const;
 
 	public:
-		std::string Attack(PokemenManager& opponent);
+		String Attack(PokemenManager& opponent);
 
 	private:
 		PBasePlayer m_instance;
@@ -64,11 +68,12 @@ namespace Pokemen
 
 	struct BattleMessage
 	{
-		std::string wsOptions;
+		String options;
 
 		BattleMessage() = default;
-		BattleMessage(const std::string& message);
+		BattleMessage(const String& message);
 	};
+	typedef std::queue<BattleMessage> BattleMessages;
 
 	class BattleStage
 	{
@@ -77,11 +82,13 @@ namespace Pokemen
 		virtual ~BattleStage();
 
 	public:
-		void AddPlayer(const PokemenManager& first_player, const PokemenManager& second_player);
+		void SetPlayers(const PokemenManager& firstPlayer, const PokemenManager& secondPlayer);
+
 		void Start();
-		void Pause();
-		void GoOn();
+		bool Pause();
+		bool GoOn();
 		void Clear();
+
 		bool IsRunning() const;
 		int  GetRoundCnt() const;
 
@@ -91,19 +98,20 @@ namespace Pokemen
 		BattleMessage ReadMessage();
 
 	private:
-		PokemenManager m_first_player;
-		PokemenManager m_second_player;
-		std::queue<BattleMessage> m_message_queue;
-		std::mutex m_message_mutex;
-		HANDLE m_message_event;
-		HANDLE m_on_off_event;
-		std::thread m_battle_thread;
+		int m_roundsCnt;
+		PokemenManager m_firstPlayer;
+		PokemenManager m_secondPlayer;
+
+		BattleMessages m_messages;
+		Mutex          m_messagesMutex;
+		HANDLE         m_messagesEvent;
+
+		HANDLE         m_stateEvent;
+		Thread         m_battleThread;
+
+		bool           m_isBattleRunnig;
 
 	private:
-		int m_round_cnt;
-
-	private:
-		bool m_is_battle_on_running;
-		void __run_battle__();
+		void _RunBattle_();
 	};
 }

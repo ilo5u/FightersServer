@@ -2,7 +2,7 @@
 
 namespace Pokemen
 {
-	static char g_szMessage[BUFLEN];
+	static char battleMessage[BUFLEN];
 	/// <summary>
 	/// 
 	/// </summary>
@@ -76,8 +76,8 @@ namespace Pokemen
 		m_instance->SetParryratio(other.GetParryratio());
 		m_instance->SetAnger(other.GetAnger());
 
-		m_instance->SetLevel(other.GetLevel());
 		m_instance->SetExp(other.GetExp());
+		m_instance->SetLevel(other.GetLevel());
 	}
 
 	PokemenManager::PokemenManager(PokemenManager&& other)
@@ -125,8 +125,8 @@ namespace Pokemen
 		m_instance->SetParryratio(other.GetParryratio());
 		m_instance->SetAnger(other.GetAnger());
 
-		m_instance->SetLevel(other.GetLevel());
 		m_instance->SetExp(other.GetExp());
+		m_instance->SetLevel(other.GetLevel());
 		return *this;
 	}
 
@@ -157,7 +157,7 @@ namespace Pokemen
 	/// <summary>
 	/// 
 	/// </summary>
-	std::string PokemenManager::GetName() const
+	String PokemenManager::GetName() const
 	{
 		if (m_instance == nullptr)
 			throw std::exception("CPokemenManager is not implement.");
@@ -282,64 +282,64 @@ namespace Pokemen
 		return m_instance->SetID(id);
 	}
 
-	bool PokemenManager::SetName(const std::string & name)
+	bool PokemenManager::SetName(const String& name)
 	{
 		return m_instance->SetName(name);
 	}
 
 	bool PokemenManager::SetHpoints(int hpoints)
 	{
-		return m_instance->SetHpoints((int16_t)hpoints);
+		return m_instance->SetHpoints((Value)hpoints);
 	}
 
 	bool PokemenManager::SetAttack(int attack)
 	{
-		return m_instance->SetAttack((int16_t)attack);
+		return m_instance->SetAttack((Value)attack);
 	}
 
 	bool PokemenManager::SetDefense(int defense)
 	{
-		return m_instance->SetDefense((int16_t)defense);
+		return m_instance->SetDefense((Value)defense);
 	}
 
 	bool PokemenManager::SetAgility(int agility)
 	{
-		return m_instance->SetAgility((int16_t)agility);
+		return m_instance->SetAgility((Value)agility);
 	}
 
 	bool PokemenManager::SetBreak(int brea)
 	{
-		return m_instance->SetBreak((int16_t)brea);
+		return m_instance->SetBreak((Value)brea);
 	}
 
 	bool PokemenManager::SetCritical(int critical)
 	{
-		return m_instance->SetCritical((int16_t)critical);
+		return m_instance->SetCritical((Value)critical);
 	}
 
 	bool PokemenManager::SetHitratio(int hitratio)
 	{
-		return m_instance->SetHitratio((int16_t)hitratio);
+		return m_instance->SetHitratio((Value)hitratio);
 	}
 
 	bool PokemenManager::SetParryratio(int parryratio)
 	{
-		return m_instance->SetParryratio((int16_t)parryratio);
+		return m_instance->SetParryratio((Value)parryratio);
 	}
 
 	bool PokemenManager::SetAnger(int anger)
 	{
-		return m_instance->SetAnger((int16_t)anger);
+		return m_instance->SetAnger((Value)anger);
 	}
 
 	bool PokemenManager::SetLevel(int level)
 	{
-		return m_instance->SetLevel((int16_t)level);
+		return m_instance->SetLevel((Value)level);
 	}
 
 	bool PokemenManager::SetExp(int exp)
 	{
-		return m_instance->SetExp((int16_t)exp);
+		return m_instance->SetExp((Value)exp);
 	}
 
 	PokemenType PokemenManager::GetType() const
@@ -369,180 +369,170 @@ namespace Pokemen
 			return static_cast<PBasePlayer>(this->m_instance)->Attack(static_cast<PBasePlayer>(opponent.m_instance));
 	}
 
-	BasePlayer::State operator&(const BasePlayer::State& l, const BasePlayer::State& r)
-	{
-		return static_cast<BasePlayer::State>(static_cast<uint16_t>(l) & static_cast<uint16_t>(r));
-	}
-
-	BasePlayer::State operator|(const BasePlayer::State & l, const BasePlayer::State & r)
-	{
-		return static_cast<BasePlayer::State>(static_cast<uint16_t>(l) | static_cast<uint16_t>(r));
-	}
-
-	bool operator!(const BasePlayer::State& s)
-	{
-		return static_cast<uint16_t>(s) != 0;
-	}
-
 	BattleStage::BattleStage() :
-		m_first_player(PokemenType::TANK),
-		m_second_player(PokemenType::TANK)
+		m_roundsCnt(0),
+		m_firstPlayer(PokemenType::DEFAULT), m_secondPlayer(PokemenType::DEFAULT),
+		m_messages(), m_messagesMutex(), m_messagesEvent(nullptr),
+		m_stateEvent(nullptr), m_battleThread(), m_isBattleRunnig(false)
 	{
-		m_message_event = CreateEvent(NULL, FALSE, NULL, NULL);
-		m_on_off_event = CreateEvent(NULL, TRUE, NULL, NULL);
+		m_messagesEvent = CreateEvent(NULL, FALSE, NULL, NULL);
+		m_stateEvent    = CreateEvent(NULL, FALSE, NULL, NULL);
 	}
 
 	BattleStage::~BattleStage()
 	{
-		CloseHandle(m_message_event);
+		CloseHandle(m_messagesEvent);
 	}
 
-	void BattleStage::AddPlayer(const Pokemen::PokemenManager& firstPlayer, const Pokemen::PokemenManager& secondPlayer)
+	void BattleStage::SetPlayers(const Pokemen::PokemenManager& firstPlayer, const Pokemen::PokemenManager& secondPlayer)
 	{
-		m_first_player = firstPlayer;
-		m_second_player = secondPlayer;
+		m_firstPlayer = firstPlayer;
+		m_secondPlayer = secondPlayer;
 	}
 
 	void BattleStage::Start()
 	{
-		SetEvent(m_on_off_event);
-		ResetEvent(m_message_event);
-		m_is_battle_on_running = true;
-		m_battle_thread = std::thread{ std::bind(&BattleStage::__run_battle__, this) };
+		SetEvent(m_stateEvent);
+		ResetEvent(m_messagesEvent);
+		m_isBattleRunnig = true;
+
+		m_battleThread = std::move(std::thread{ std::bind(&BattleStage::_RunBattle_, this) });
 	}
 
-	void BattleStage::Pause()
+	bool BattleStage::Pause()
 	{
-		ResetEvent(m_on_off_event);
+		ResetEvent(m_stateEvent);
+		return m_isBattleRunnig;
 	}
 
-	void BattleStage::GoOn()
+	bool BattleStage::GoOn()
 	{
-		SetEvent(m_on_off_event);
+		SetEvent(m_stateEvent);
+		return m_isBattleRunnig;
 	}
 
 	void BattleStage::Clear()
 	{
-		m_is_battle_on_running = false;
-		if (m_battle_thread.joinable())
-			m_battle_thread.join();
-		m_round_cnt = 0;
+		m_isBattleRunnig = false;
+		if (m_battleThread.joinable())
+			m_battleThread.join();
+		m_roundsCnt = 0;
 	}
 
 	bool BattleStage::IsRunning() const
 	{
-		return m_is_battle_on_running;
+		return m_isBattleRunnig;
 	}
 
 	int BattleStage::GetRoundCnt() const
 	{
-		return m_round_cnt;
+		return m_roundsCnt;
 	}
 
 	int BattleStage::GetFirstPlayerId() const
 	{
-		return m_first_player.GetID();
+		return m_firstPlayer.GetID();
 	}
 
 	int BattleStage::GetSecondPlayerId() const
 	{
-		return m_second_player.GetID();
+		return m_secondPlayer.GetID();
 	}
 
 	BattleMessage BattleStage::ReadMessage()
 	{
-		WaitForSingleObject(m_message_event, 1000);
+		WaitForSingleObject(m_messagesEvent, 2000);
 		BattleMessage message;
-		m_message_mutex.lock();
+		m_messagesMutex.lock();
 
-		ResetEvent(m_message_event);
-		if (!m_message_queue.empty())
+		ResetEvent(m_messagesEvent);
+		if (!m_messages.empty())
 		{
-			message = m_message_queue.front();
-			m_message_queue.pop();
+			message = m_messages.front();
+			m_messages.pop();
 		}
 
-		m_message_mutex.unlock();
+		m_messagesMutex.unlock();
 		return message;
 	}
 
-	void BattleStage::__run_battle__()
+	void BattleStage::_RunBattle_()
 	{
-		int break_of_first  = m_first_player.GetBreak();
-		int break_of_second = m_second_player.GetBreak();
+		int break_of_first  = m_firstPlayer.GetBreak();
+		int break_of_second = m_secondPlayer.GetBreak();
 
-		m_round_cnt = 0;
-		std::string message;
-		while (!m_first_player.InState(BasePlayer::State::DEAD)
-			&& !m_second_player.InState(BasePlayer::State::DEAD)
-			&& m_is_battle_on_running)
+		m_roundsCnt = 0;
+		String message;
+		while (!m_firstPlayer.InState(BasePlayer::State::DEAD)
+			&& !m_secondPlayer.InState(BasePlayer::State::DEAD)
+			&& m_isBattleRunnig)
 		{
-			++m_round_cnt;
+			++m_roundsCnt;
 
-			int min_span = min(break_of_first, break_of_second);
+			int min_span = std::min<int>(break_of_first, break_of_second);
 			Sleep(min_span);
 
-			break_of_first -= min_span;
+			break_of_first  -= min_span;
 			break_of_second -= min_span;
 
 			if (break_of_first == 0)
 			{
-				message = "FIRST=" + m_first_player.Attack(m_second_player);
-				break_of_first = m_first_player.GetBreak();
+				message = "FIRST=" + m_firstPlayer.Attack(m_secondPlayer);
+				break_of_first = m_firstPlayer.GetBreak();
 
-				m_message_mutex.lock();
+				m_messagesMutex.lock();
 
-				m_message_queue.push(message);
-				SetEvent(m_message_event);
+				m_messages.push(message);
+				SetEvent(m_messagesEvent);
 
-				m_message_mutex.unlock();
+				m_messagesMutex.unlock();
 			}
 			if (break_of_second == 0)
 			{
-				message = "SECOND=" + m_second_player.Attack(m_first_player);
-				break_of_second = m_second_player.GetBreak();
+				message = "SECOND=" + m_secondPlayer.Attack(m_firstPlayer);
+				break_of_second = m_secondPlayer.GetBreak();
 
-				m_message_mutex.lock();
+				m_messagesMutex.lock();
 
-				m_message_queue.push(message);
-				SetEvent(m_message_event);
+				m_messages.push(message);
+				SetEvent(m_messagesEvent);
 
-				m_message_mutex.unlock();
+				m_messagesMutex.unlock();
 			}	// 将小精灵的所有属性值打包发送
-			sprintf(g_szMessage, "RENEW:FIRST=%d,%d,%d,%d,%d,%d,%d,%d,%d\nSECOND=%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
-				m_first_player.GetHpoints(), m_first_player.GetAttack(), m_first_player.GetDefense(), m_first_player.GetAgility(),
-				m_first_player.GetBreak(), m_first_player.GetCritical(), m_first_player.GetHitratio(), m_first_player.GetParryratio(), m_first_player.GetAnger(),
-				m_second_player.GetHpoints(), m_second_player.GetAttack(), m_second_player.GetDefense(), m_second_player.GetAgility(),
-				m_second_player.GetBreak(), m_second_player.GetCritical(), m_second_player.GetHitratio(), m_second_player.GetParryratio(), m_second_player.GetAnger());
+			sprintf(battleMessage, "RENEW:FIRST=%d,%d,%d,%d,%d,%d,%d,%d,%d\nSECOND=%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+				m_firstPlayer.GetHpoints(), m_firstPlayer.GetAttack(), m_firstPlayer.GetDefense(), m_firstPlayer.GetAgility(),
+				m_firstPlayer.GetBreak(), m_firstPlayer.GetCritical(), m_firstPlayer.GetHitratio(), m_firstPlayer.GetParryratio(), m_firstPlayer.GetAnger(),
+				m_secondPlayer.GetHpoints(), m_secondPlayer.GetAttack(), m_secondPlayer.GetDefense(), m_secondPlayer.GetAgility(),
+				m_secondPlayer.GetBreak(), m_secondPlayer.GetCritical(), m_secondPlayer.GetHitratio(), m_secondPlayer.GetParryratio(), m_secondPlayer.GetAnger());
 
-			m_message_mutex.lock();
+			m_messagesMutex.lock();
 
-			m_message_queue.push({ g_szMessage });
-			SetEvent(m_message_event);
+			m_messages.push({ battleMessage });
+			SetEvent(m_messagesEvent);
 
-			m_message_mutex.unlock();
+			m_messagesMutex.unlock();
 
-			// WaitForSingleObject(m_on_off_event, INFINITE);
+			WaitForSingleObject(m_stateEvent, INFINITE);
 		}
 
 		message = "GAME END WITH ";
-		if (m_first_player.InState(BasePlayer::State::DEAD))
+		if (m_firstPlayer.InState(BasePlayer::State::DEAD))
 			message += "0";
 		else
 			message += "1";
 
-		m_message_mutex.lock();
+		m_messagesMutex.lock();
 
-		m_message_queue.push(message);
-		SetEvent(m_message_event);
+		m_messages.push(message);
+		SetEvent(m_messagesEvent);
 
-		m_message_mutex.unlock();
+		m_messagesMutex.unlock();
 
-		m_is_battle_on_running = false;
+		m_isBattleRunnig = false;
 	}
 
-	BattleMessage::BattleMessage(const std::string& message) :
-		wsOptions(message)
+	BattleMessage::BattleMessage(const String& message) :
+		options(message)
 	{
 	}
 }

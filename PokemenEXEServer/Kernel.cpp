@@ -6,15 +6,16 @@ constexpr int INSTANCE_EXISTED = 0xFFFFFFFF;
 constexpr int INIT_FAILED = 0xFFFFFFFE;
 constexpr int INIT_SUCCESS = 0x00000000;
 
-static HSERVER g_hServer = nullptr;
+typedef Server * HServer;
+static HServer hServer = nullptr;
 
 int InitServer()
 {
-	if (g_hServer)
+	if (hServer)
 		return INSTANCE_EXISTED;
 
-	g_hServer = new Server{};
-	if (g_hServer->Init())
+	hServer = new Server{};
+	if (hServer->Init())
 		return INIT_FAILED;
 
 	return INIT_SUCCESS;
@@ -22,16 +23,16 @@ int InitServer()
 
 int RunServer()
 {
-	return g_hServer->Run();
+	return hServer->Run();
 }
 
-std::string QueryServer(const char query[])
+String QueryServer(const char query[])
 {
-	std::string queryResult;
+	String queryResult;
 	if (std::strcmp(query, "show clients\n") == 0)
 	{
 		queryResult = 
-			g_hServer->GetClients();
+			hServer->GetClients();
 	}
 
 	return queryResult;

@@ -21,28 +21,28 @@
     <ClInclude Include="targetver.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="CServer.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="CDatabase.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="CUserMenager.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="Kernel.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="IO.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="CPokemen.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="CPokemenManager.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="RandomGenerator.hpp">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Database.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Pokemen.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="PokemenManager.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Server.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="UserManager.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -56,35 +56,38 @@
     <ClCompile Include="Kernel.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CDatabase.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="CServer.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="CUserMenager.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="IO.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CEaglePlayer.cpp">
+    <ClCompile Include="Database.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CHedgehogPlayer.cpp">
+    <ClCompile Include="EaglePlayer.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CLionPlayer.cpp">
+    <ClCompile Include="HedgehogPlayer.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CPokemenManager.cpp">
+    <ClCompile Include="LionPlayer.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CPokemenPlayer.cpp">
+    <ClCompile Include="PokemenManager.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="CTankPlayer.cpp">
+    <ClCompile Include="PokemenPlayer.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="Server.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="TankPlayer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="UserManager.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="cpp.hint" />
   </ItemGroup>
 </Project>

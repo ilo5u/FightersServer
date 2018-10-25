@@ -2,24 +2,24 @@
 
 namespace Pokemen
 {
-	static std::vector<std::string> g_Agilename_Base{ "Kakuna", "Beedrill", "Pidgey", "Pidgeotto" };
+	static const Strings NamesOfEagle{ "Kakuna", "Beedrill", "Pidgey", "Pidgeotto" };
 
 	/// <summary>
 	/// 
 	/// </summary>
-	Eagle::Eagle(Skill::Type primary_skill, int level) :
+	Eagle::Eagle(Skill::Type primarySkill, int level) :
 		BasePlayer(
-			g_Agilename_Base[_Random(g_Agilename_Base.size())],
-			hitpoints_base + _Random(property_offset),
-			attack_base + _Random(property_offset),
-			defense_base + _Random(property_offset),
-			agility_base + _Random(property_offset),
+			NamesOfEagle[_Random(NamesOfEagle.size())],
+			hitpointsBase + _Random(propertyOffset),
+			attackBase + _Random(propertyOffset),
+			defenseBase + _Random(propertyOffset),
+			agilityBase + _Random(propertyOffset),
 			PokemenType::EAGLE
 		),
-		m_skill(primary_skill)
+		m_skill(primarySkill)
 	{
-		while (this->m_level < min(level, level_limitation))
-			Update(exp_base);
+		while (this->m_level < std::min<Value>(level, levelLimitation))
+			Update(expBase);
 	}
 
 	/// <summary>
@@ -29,22 +29,22 @@ namespace Pokemen
 	{
 	}
 
-	Eagle::Skill::Skill(Type primary_skill)
+	Eagle::Skill::Skill(Type primarySkill)
 	{
-		m_primary_skill = primary_skill;
+		m_primarySkill = primarySkill;
 	}
 
-	std::string Eagle::Attack(BasePlayer& opponent)
+	String Eagle::Attack(BasePlayer& opponent)
 	{
-		return false;
+		return {};
 	}
 
-	int16_t Eagle::IsAttacked(int16_t damage)
+	Value Eagle::IsAttacked(Value damage)
 	{
-		return int16_t();
+		return Value();
 	}
 
-	bool Eagle::SetPrimarySkill(Skill::Type primary_skill)
+	bool Eagle::SetPrimarySkill(Skill::Type primarySkill)
 	{
 		return false;
 	}

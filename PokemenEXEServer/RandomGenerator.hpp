@@ -14,7 +14,7 @@ namespace Pokemen
 		std::random_device rd;
 		g_Rand_Engine.seed(rd());
 
-		std::uniform_int_distribution<> u(0, limit - 1);
+		std::uniform_int_distribution<> u(0, (int)limit - 1);
 		return u(g_Rand_Engine);
 	}
 

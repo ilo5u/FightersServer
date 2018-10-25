@@ -3,19 +3,24 @@
 
 #include <thread>
 
-constexpr int PORT = 27893;
+typedef Packet::Type PacketType;
 
-constexpr int INIT_SUCCESS = 0x00000000;
-constexpr int INIT_DATABASE_ERROR = 0xFFFFFFFE;
-constexpr int INIT_NETWORK_ERROR = 0xFFFFFFFF;
+constexpr int  PORT = 27893;
 
-constexpr auto DATABASE_USER = "root";
+constexpr int  INIT_SUCCESS        = 0x00000000;
+constexpr int  INIT_DATABASE_ERROR = 0xFFFFFFFE;
+constexpr int  INIT_NETWORK_ERROR  = 0xFFFFFFFF;
+
+constexpr auto DATABASE_USER     = "root";
 constexpr auto DATABASE_PASSWORD = "19981031";
-constexpr auto DATABASE_NAME = "pokemen_user_database";
+constexpr auto DATABASE_NAME     = "pokemen_user_database";
 
 Server::Server() :
-	m_hDatabase{new Database{}},
-	m_userList{}
+	m_hDatabase{ new Database{} },
+	m_serverSocket(), m_serverAddr(),
+	m_recvMutex(), m_recvEvent(nullptr), m_recvMessages(),
+	m_userList(),
+	m_userListMutex()
 {
 }
 
@@ -30,7 +35,7 @@ int Server::Init()
 	if (m_hDatabase->Connect(DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME))
 		return INIT_DATABASE_ERROR;
 
-	if (_init_network_())
+	if (_InitNetwork_())
 		return INIT_NETWORK_ERROR;
 
 	return INIT_SUCCESS;
@@ -38,15 +43,15 @@ int Server::Init()
 
 int Server::Run()
 {
-	std::thread accept_thread{ std::bind(&Server::_accept_, this) };
-	accept_thread.detach();
+	Thread acceptThread{ std::bind(&Server::_ServerAcceptThread_, this) };
+	acceptThread.detach();
 
 	m_recvEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-	std::thread recv_thread{ std::bind(&Server::_server_recv_thread_, this) };
-	recv_thread.detach();
+	Thread recvThread{ std::bind(&Server::_ServerRecvThread_, this) };
+	recvThread.detach();
 
-	std::thread send_thread{ std::bind(&Server::_server_send_thread_, this) };
-	send_thread.detach();
+	Thread sendThread{ std::bind(&Server::_ServerSendThread_, this) };
+	sendThread.detach();
 
 	return INIT_SUCCESS;
 }
@@ -55,23 +60,23 @@ void Server::WriteMessage(const Message& message)
 {
 	m_recvMutex.lock();
 
-	m_recvMessageQueue.push(message);
+	m_recvMessages.push(message);
 	SetEvent(m_recvEvent);
 
 	m_recvMutex.unlock();
 }
 
-std::string Server::GetClients() const
+String Server::GetClients() const
 {
-	std::string queryResult;
-	char querySingle[1024];
-	int id = 0;
-	for (USER_LIST::const_iterator it = m_userList.begin();
+	String queryResult;
+	char   querySingle[BUFLEN];
+	int    id = 0;
+	for (UserList::const_iterator it = m_userList.begin();
 		it != m_userList.end(); ++it)
 	{
 		++id;
 		SOCKADDR_IN addr;
-		addr.sin_addr.S_un.S_addr = (*it)->GetID();
+		addr.sin_addr.S_un.S_addr = (*it)->GetUserID();
 		sprintf(querySingle, "Client %d: ip=%s\n", id, inet_ntoa(addr.sin_addr));
 
 		queryResult += querySingle;
@@ -84,7 +89,7 @@ std::string Server::GetClients() const
 	return queryResult;
 }
 
-int Server::_init_network_()
+int Server::_InitNetwork_()
 {
 	int iRetVal = 0;
 	WSADATA wsaData;
@@ -124,18 +129,18 @@ int Server::_init_network_()
 	return 0;
 }
 
-void Server::_deal_with_user_launch_(const Message& message)
+void Server::_DealWithUserLaunch_(const Message& message)
 {
-	std::vector<std::string> queryResult;
-	char szQuery[BUFLEN];
+	Strings queryResult;
+	char    szQuery[BUFLEN];
 
 	sprintf(szQuery, "select password from user_launch_info where name='%s'",
-		message.data.user_info.name);
+		message.data.user.name);
 	queryResult = m_hDatabase->Select(szQuery, 1);
 
 	m_userListMutex.lock();
-	USER_LIST::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUSERMANAGER& hUserManager) {
-		return hUserManager->GetID() == message.id;
+	UserList::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUser& hUserManager) {
+		return hUserManager->GetUserID() == message.id;
 	}); // 查找对应的用户连接实例
 	if (it_user == m_userList.end()) printf("致命错误：查找用户实例失败！\n");
 	else
@@ -147,39 +152,37 @@ void Server::_deal_with_user_launch_(const Message& message)
 			sscanf(queryResult[0].c_str(), "%s\n", szPassword);
 
 			// 优先反馈登陆是否成功
-			if (std::strcmp(szPassword, message.data.user_info.password) != 0) packet.type = Packet::Type::LAUNCH_FAILED, printf("登陆失败。\n");
+			if (std::strcmp(szPassword, message.data.user.password) != 0) packet.type = PacketType::LAUNCH_FAILED, printf("登陆失败。\n");
 			else
 			{
-				USER_LIST::iterator it = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUSERMANAGER& hUserManager) {
-					return hUserManager->GetName() == message.data.user_info.name;
+				UserList::iterator it = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUser& hUserManager) {
+					return hUserManager->GetUsername() == message.data.user.name;
 				});
-				if (it != m_userList.end()) packet.type = Packet::Type::LAUNCH_FAILED, printf("登陆失败。\n");
+				if (it != m_userList.end()) packet.type = PacketType::LAUNCH_FAILED, printf("登陆失败。\n");
 				else
 				{
-					(*it_user)->SetName(message.data.user_info.name);
-					packet.type = Packet::Type::LAUNCH_SUCCESS, printf("登陆成功。\n");
+					(*it_user)->SetUsername(message.data.user.name);
+					packet.type = PacketType::LAUNCH_SUCCESS, printf("登陆成功。\n");
 				}
 			}
-
 			(*it_user)->WritePacket(packet);
 
 			// 后续反馈登陆成功后用户的相关信息
-			if (packet.type == Packet::Type::LAUNCH_SUCCESS)
+			if (packet.type == PacketType::LAUNCH_SUCCESS)
 			{
 				sprintf(szQuery, "select identity,pokemen_property from user_pokemen_info where user_name='%s'",
-					message.data.user_info.name);
+					message.data.user.name);
 				queryResult = m_hDatabase->Select(szQuery, 2);
 
 				if (queryResult.size() == 0)
 				{	// 用户没有小精灵
 					printf("用户至注册后第一次登陆。分配小精灵。\n");
-					packet.type = Packet::Type::DISTRIBUTE_POKEMENS;
-
+					packet.type = PacketType::DISTRIBUTE_POKEMENS;
 					(*it_user)->WritePacket(packet);
 
 					for (int i = 0; i < 3; ++i)
 					{
-						Pokemen::PokemenManager newPokemen(Pokemen::PokemenType::DEFAULT);
+						Pokemen::PokemenManager newPokemen(PokemenType::DEFAULT);
 						sprintf(szQuery,
 							"insert into user_pokemen_info(pokemen_property,user_name) values('NAME=%s,TY=%d,HP=%d,AT=%d,DE=%d,AG=%d,BR=%d,CR=%d,HI=%d,PA=%d,EX=%d,LE=%d','%s')",
 							newPokemen.GetName().c_str(),
@@ -187,18 +190,18 @@ void Server::_deal_with_user_launch_(const Message& message)
 							newPokemen.GetHpoints(), newPokemen.GetAttack(), newPokemen.GetDefense(), newPokemen.GetAgility(),
 							newPokemen.GetBreak(), newPokemen.GetCritical(), newPokemen.GetHitratio(), newPokemen.GetParryratio(),
 							newPokemen.GetExp(), newPokemen.GetLevel(),
-							message.data.user_info.name
+							message.data.user.name
 						);
 						m_hDatabase->Insert(szQuery);
 					}
 					// 重新查询小精灵情况 获取ID值
 					sprintf(szQuery, "select identity,pokemen_property from user_pokemen_info where user_name='%s'",
-						message.data.user_info.name);
+						message.data.user.name);
 					queryResult = m_hDatabase->Select(szQuery, 2);
 				}
 
-				packet.type = Packet::Type::INSERT_A_POKEMEN;
-				for (std::vector<std::string>::const_iterator it_result = queryResult.begin();
+				packet.type = PacketType::INSERT_A_POKEMEN;
+				for (Strings::const_iterator it_result = queryResult.begin();
 					it_result != queryResult.end(); ++it_result)
 				{
 					sprintf(packet.data, "%s", it_result->c_str());
@@ -206,9 +209,9 @@ void Server::_deal_with_user_launch_(const Message& message)
 					(*it_user)->WritePacket(packet);
 				}
 
-				packet.type = Packet::Type::UPDATE_USERS;
-				sprintf(packet.data, "NAME=%s,STATE=ON\n", (*it_user)->GetName().c_str());
-				for (USER_LIST::const_iterator it_other = m_userList.begin();
+				packet.type = PacketType::UPDATE_USERS;
+				sprintf(packet.data, "NAME=%s,STATE=ON\n", (*it_user)->GetUsername().c_str());
+				for (UserList::const_iterator it_other = m_userList.begin();
 					it_other != m_userList.end(); ++it_other)
 				{
 					if (it_other == it_user)
@@ -221,53 +224,53 @@ void Server::_deal_with_user_launch_(const Message& message)
 		{
 			printf("登陆失败。\n");
 
-			packet.type = Packet::Type::LAUNCH_FAILED;
+			packet.type = PacketType::LAUNCH_FAILED;
 			(*it_user)->WritePacket(packet);
 		}
 	}
 	m_userListMutex.unlock();
 }
 
-void Server::_deal_with_user_register_(const Message& message)
+void Server::_DealWithUserRegister_(const Message& message)
 {
-	std::vector<std::string> queryResult;
-	char szQuery[BUFLEN];
+	Strings queryResult;
+	char    szQuery[BUFLEN];
 
 	m_userListMutex.lock();
-	USER_LIST::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUSERMANAGER& hUserManager) {
-		return hUserManager->GetID() == message.id;
+	UserList::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUser& hUserManager) {
+		return hUserManager->GetUserID() == message.id;
 	});
 	if (it_user == m_userList.end()) printf("致命错误：查找用户实例失败！\n");
 	else
 	{
 		sprintf(szQuery, "insert into user_launch_info values('%s','%s')",
-			message.data.user_info.name, message.data.user_info.password);
+			message.data.user.name, message.data.user.password);
 
 		Packet packet;
 		if (m_hDatabase->Insert(szQuery))
-			packet.type = Packet::Type::REGISTER_SUCCESS, printf("注册成功。\n");
+			packet.type = PacketType::REGISTER_SUCCESS, printf("注册成功。\n");
 		else
-			packet.type = Packet::Type::REGISTER_FAILED, printf("注册失败。\n");
+			packet.type = PacketType::REGISTER_FAILED, printf("注册失败。\n");
 		(*it_user)->WritePacket(packet);
 	}
 	m_userListMutex.unlock();
 }
 
-void Server::_deal_with_user_closed_(const Message& message)
+void Server::_DealWithUserClosed_(const Message& message)
 {
-	std::vector<std::string> queryResult;
+	Strings queryResult;
 
 	m_userListMutex.lock();
-	USER_LIST::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUSERMANAGER& hUserManager) {
-		return hUserManager->GetID() == message.id;
+	UserList::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUser& hUserManager) {
+		return hUserManager->GetUserID() == message.id;
 	});
 	if (it_user == m_userList.end()) printf("致命错误：查找用户实例失败！\n");
 	else
 	{
 		Packet packet;
-		packet.type = Packet::Type::UPDATE_USERS;
-		sprintf(packet.data, "NAME=%s,STATE=OFF\n", (*it_user)->GetName().c_str());
-		for (USER_LIST::const_iterator it = m_userList.begin();
+		packet.type = PacketType::UPDATE_USERS;
+		sprintf(packet.data, "NAME=%s,STATE=OFF\n", (*it_user)->GetUsername().c_str());
+		for (UserList::const_iterator it = m_userList.begin();
 			it != m_userList.end(); ++it)
 		{
 			if (it == it_user)
@@ -283,35 +286,35 @@ void Server::_deal_with_user_closed_(const Message& message)
 	m_userListMutex.unlock();
 }
 
-void Server::_deal_with_get_online_users_(const Message& message)
+void Server::_DealWithGetOnlineUsers_(const Message& message)
 {
 	m_userListMutex.lock();
-	USER_LIST::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUSERMANAGER& hUserManager) {
-		return hUserManager->GetID() == message.id;
+	UserList::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUser& hUserManager) {
+		return hUserManager->GetUserID() == message.id;
 	});
 	if (it_user == m_userList.end()) printf("致命错误：查找用户实例失败！\n");
 	else
 	{
+		char   szUserNames[BUFLEN];
+		int    cnt = 0;
 		Packet packet;
-		char szUserNames[BUFLEN];
-		packet.type = Packet::Type::SET_ONLINE_USERS;
-		int cnt = 0;
+		packet.type = PacketType::SET_ONLINE_USERS;
 
-		std::memset(szUserNames, 0x0, BUFLEN);
-		for (USER_LIST::const_iterator it = m_userList.begin();
-			it != m_userList.end(); ++it)
+		ZeroMemory(szUserNames, sizeof(szUserNames));
+		for (UserList::const_iterator it_other = m_userList.begin();
+			it_other != m_userList.end(); ++it_other)
 		{
-			if ((*it)->GetID() == message.id) continue;
+			if ((*it_other)->GetUserID() == message.id) continue;
 
 			++cnt;
-			sprintf(szUserNames + std::strlen(szUserNames), "%s,", (*it)->GetName().c_str());
+			sprintf(szUserNames + std::strlen(szUserNames), "%s,", (*it_other)->GetUsername().c_str());
 			if (cnt == 20)
 			{
 				sprintf(packet.data, "TOTAL=20,%s", szUserNames);
 				(*it_user)->WritePacket(packet);
 
 				cnt = 0;
-				std::memset(szUserNames, 0x0, BUFLEN);
+				ZeroMemory(szUserNames, sizeof(szUserNames));
 			}
 		}
 		sprintf(packet.data, "TOTAL=%d,%s", cnt, szUserNames);
@@ -320,17 +323,17 @@ void Server::_deal_with_get_online_users_(const Message& message)
 	m_userListMutex.unlock();
 }
 
-void Server::_deal_with_battle_result_(const Message& message)
+void Server::_DealWithBattleResult_(const Message& message)
 {
 }
 
-void Server::_accept_()
+void Server::_ServerAcceptThread_()
 {
-	SOCKADDR_IN clientAddr;
-	int clientAddrLen = sizeof(SOCKADDR_IN);
+	SockaddrIn clientAddr;
+	int clientAddrLen = sizeof(SockaddrIn);
 	while (true)
 	{
-		SOCKET connectSocket = accept(m_serverSocket, (LPSOCKADDR)&clientAddr,
+		Socket connectSocket = accept(m_serverSocket, (LPSOCKADDR)&clientAddr,
 			&clientAddrLen);
 		if (connectSocket == INVALID_SOCKET)
 		{
@@ -339,15 +342,15 @@ void Server::_accept_()
 		}
 
 		m_userListMutex.lock();
-		m_userList.push_back(new UserManager{ connectSocket, clientAddr, this });
+		m_userList.push_back(new UserManager{ connectSocket, clientAddr, *this });
 		m_userListMutex.unlock();
 	}
 }
 
-void Server::_server_recv_thread_()
+void Server::_ServerRecvThread_()
 {
 	Message message;
-	std::vector<std::string> queryResult;
+	Strings queryResult;
 	while (true)
 	{
 		WaitForSingleObject(m_recvEvent, 2000);
@@ -355,11 +358,11 @@ void Server::_server_recv_thread_()
 		ResetEvent(m_recvEvent);
 
 		bool recvValid = false;
-		if (!m_recvMessageQueue.empty())
+		if (!m_recvMessages.empty())
 		{
 			recvValid = true;
-			message = m_recvMessageQueue.front();
-			m_recvMessageQueue.pop();
+			message = m_recvMessages.front();
+			m_recvMessages.pop();
 		}
 
 		m_recvMutex.unlock();
@@ -368,39 +371,39 @@ void Server::_server_recv_thread_()
 		{
 			switch (message.type)
 			{
-			case Message::Type::USER_LAUNCH:
+			case MessageType::USER_LAUNCH:
 			{
-				_deal_with_user_launch_(message);
-				//std::thread thread{ std::bind(&Server::_deal_with_user_launch_, this) };
+				_DealWithUserLaunch_(message);
+				//std::thread thread{ std::bind(&Server::_DealWithUserLaunch_, this) };
 				//thread.detach();
 			}
 			break;
 
-			case Message::Type::USER_REGISTER:
+			case MessageType::USER_REGISTER:
 			{
-				_deal_with_user_register_(message);
-				//std::thread thread{ std::bind(&Server::_deal_with_user_register_, this) };
+				_DealWithUserRegister_(message);
+				//std::thread thread{ std::bind(&Server::_DealWithUserRegister_, this) };
 				//thread.detach();
 			}
 			break;
 
-			case Message::Type::USER_CLOSED:
+			case MessageType::USER_CLOSED:
 			{
-				_deal_with_user_closed_(message);
-				//std::thread thread{ std::bind(&Server::_deal_with_user_closed_, this) };
+				_DealWithUserClosed_(message);
+				//std::thread thread{ std::bind(&Server::_DealWithUserClosed_, this) };
 				//thread.detach();
 			}
 			break;
 
-			case Message::Type::GET_ONLINE_USERS:
+			case MessageType::GET_ONLINE_USERS:
 			{
-				_deal_with_get_online_users_(message);
+				_DealWithGetOnlineUsers_(message);
 			}
 			break;
 
-			case Message::Type::HANDLE_BATTLE_RESULT:
+			case MessageType::HANDLE_BATTLE_RESULT:
 			{
-				_deal_with_battle_result_(message);
+				_DealWithBattleResult_(message);
 			}
 			break;
 
@@ -411,7 +414,7 @@ void Server::_server_recv_thread_()
 	}
 }
 
-void Server::_server_send_thread_()
+void Server::_ServerSendThread_()
 {
 	while (true)
 	{
@@ -431,12 +434,14 @@ Server::Message::Message(const Message& other) :
 	{
 	case Type::USER_LAUNCH:
 	case Type::USER_REGISTER:
-		std::strncpy(data.user_info.name, other.data.user_info.name, USER_NAME_LENGTH);
-		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+	case Type::HANDLE_BATTLE_RESULT:
+		std::strncpy(data.user.name, other.data.user.name, USER_NAME_LENGTH);
+		std::strncpy(data.user.password, other.data.user.password, PASSWORD_LENGTH);
 		id = other.id;
 		break;
 
 	case Type::USER_CLOSED:
+	case Type::GET_ONLINE_USERS:
 		id = other.id;
 		break;
 
@@ -452,12 +457,14 @@ Server::Message::Message(Message&& other) :
 	{
 	case Type::USER_LAUNCH:
 	case Type::USER_REGISTER:
-		std::strncpy(data.user_info.name, other.data.user_info.name, USER_NAME_LENGTH);
-		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+	case Type::HANDLE_BATTLE_RESULT:
+		std::strncpy(data.user.name, other.data.user.name, USER_NAME_LENGTH);
+		std::strncpy(data.user.password, other.data.user.password, PASSWORD_LENGTH);
 		id = other.id;
 		break;
 
 	case Type::USER_CLOSED:
+	case Type::GET_ONLINE_USERS:
 		id = other.id;
 		break;
 
@@ -473,12 +480,14 @@ Server::Message& Server::Message::operator=(const Message& other)
 	{
 	case Type::USER_LAUNCH:
 	case Type::USER_REGISTER:
-		std::strncpy(data.user_info.name, other.data.user_info.name, USER_NAME_LENGTH);
-		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+	case Type::HANDLE_BATTLE_RESULT:
+		std::strncpy(data.user.name, other.data.user.name, USER_NAME_LENGTH);
+		std::strncpy(data.user.password, other.data.user.password, PASSWORD_LENGTH);
 		id = other.id;
 		break;
 
 	case Type::USER_CLOSED:
+	case Type::GET_ONLINE_USERS:
 		id = other.id;
 		break;
 
@@ -488,19 +497,21 @@ Server::Message& Server::Message::operator=(const Message& other)
 	return *this;
 }
 
-Server::Message& Server::Message::operator=(Message && other)
+Server::Message& Server::Message::operator=(Message&& other)
 {
 	type = other.type;
 	switch (type)
 	{
 	case Type::USER_LAUNCH:
 	case Type::USER_REGISTER:
-		std::strncpy(data.user_info.name, other.data.user_info.name, USER_NAME_LENGTH);
-		std::strncpy(data.user_info.password, other.data.user_info.password, PASSWORD_LENGTH);
+	case Type::HANDLE_BATTLE_RESULT:
+		std::strncpy(data.user.name, other.data.user.name, USER_NAME_LENGTH);
+		std::strncpy(data.user.password, other.data.user.password, PASSWORD_LENGTH);
 		id = other.id;
 		break;
 
 	case Type::USER_CLOSED:
+	case Type::GET_ONLINE_USERS:
 		id = other.id;
 		break;
 

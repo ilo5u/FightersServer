@@ -5,20 +5,16 @@ namespace Pokemen
 	/// <summary>
 	/// 
 	/// </summary>
-	PokemenProperty::PokemenProperty(std::string name, int16_t hitpoints, int16_t attack, int16_t defense, int16_t agility, PokemenType type) :
+	PokemenProperty::PokemenProperty(String name, Value hitpoints, Value attack, Value defense, Value agility, PokemenType type) :
 		m_name(name),
-		m_hpoints(hitpoints),
-		m_attack(attack),
-		m_defense(defense),
-		m_agility(agility),
+		m_hpoints(hitpoints), m_attack(attack), m_defense(defense),	m_agility(agility),
 		m_type(type),
-		m_level(1),
-		m_exp(0)
+		m_exp(0), m_level(1)
 	{
-		m_break = BreakValueCalculator(break_base, m_agility, m_attack);
-		m_critical = CriticalValueCalculator(critical_base, m_agility);
-		m_hitratio = HitratioValueCalculator(hitratio_base, m_agility, m_hpoints);
-		m_parryratio = ParryratioValueCalculator(parryratio_base, m_agility, m_defense);
+		m_break      = BreakValueCalculator(breakBase, m_agility, m_attack);
+		m_critical   = CriticalValueCalculator(criticalBase, m_agility);
+		m_hitratio   = HitratioValueCalculator(hitratioBase, m_agility, m_hpoints);
+		m_parryratio = ParryratioValueCalculator(parryratioBase, m_agility, m_defense);
 	}
 
 	/// <summary>
@@ -33,47 +29,47 @@ namespace Pokemen
 		return m_id;
 	}
 
-	std::string PokemenProperty::GetName() const
+	String PokemenProperty::GetName() const
 	{
 		return m_name;
 	}
 
-	int16_t PokemenProperty::GetHpoints() const
+	Value PokemenProperty::GetHpoints() const
 	{
 		return m_hpoints;
 	}
 
-	int16_t PokemenProperty::GetAttack() const
+	Value PokemenProperty::GetAttack() const
 	{
 		return m_attack;
 	}
 
-	int16_t PokemenProperty::GetDefense() const
+	Value PokemenProperty::GetDefense() const
 	{
 		return m_defense;
 	}
 
-	int16_t PokemenProperty::GetAgility() const
+	Value PokemenProperty::GetAgility() const
 	{
 		return m_agility;
 	}
 
-	int16_t PokemenProperty::GetBreak() const
+	Value PokemenProperty::GetBreak() const
 	{
 		return m_break;
 	}
 
-	int16_t PokemenProperty::GetCritical() const
+	Value PokemenProperty::GetCritical() const
 	{
 		return m_critical;
 	}
 
-	int16_t PokemenProperty::GetHitratio() const
+	Value PokemenProperty::GetHitratio() const
 	{
 		return m_hitratio;
 	}
 
-	int16_t PokemenProperty::GetParryratio() const
+	Value PokemenProperty::GetParryratio() const
 	{
 		return m_parryratio;
 	}
@@ -83,14 +79,14 @@ namespace Pokemen
 		return m_type;
 	}
 
-	int16_t PokemenProperty::GetLevel() const
-	{
-		return m_level;
-	}
-
-	int16_t PokemenProperty::GetExp() const
+	Value PokemenProperty::GetExp() const
 	{
 		return m_exp;
+	}
+
+	Value PokemenProperty::GetLevel() const
+	{
+		return m_level;
 	}
 
 	bool PokemenProperty::SetID(int id)
@@ -99,126 +95,126 @@ namespace Pokemen
 		return false;
 	}
 
-	bool PokemenProperty::SetName(const std::string& name)
+	bool PokemenProperty::SetName(const String& name)
 	{
 		m_name = name;
 		return false;
 	}
 
-	bool PokemenProperty::SetHpoints(int16_t hpoints)
+	bool PokemenProperty::SetHpoints(Value hpoints)
 	{
 		m_hpoints = hpoints;
 		return false;
 	}
 
-	bool PokemenProperty::SetAttack(int16_t attack)
+	bool PokemenProperty::SetAttack(Value attack)
 	{
 		m_attack = attack;
 		return false;
 	}
 
-	bool PokemenProperty::SetDefense(int16_t defense)
+	bool PokemenProperty::SetDefense(Value defense)
 	{
 		m_defense = defense;
 		return false;
 	}
 
-	bool PokemenProperty::SetAgility(int16_t agility)
+	bool PokemenProperty::SetAgility(Value agility)
 	{
 		m_agility = agility;
 		return false;
 	}
 
-	bool PokemenProperty::SetBreak(int16_t brea)
+	bool PokemenProperty::SetBreak(Value brea)
 	{
 		m_break = brea;
 		return false;
 	}
 
-	bool PokemenProperty::SetCritical(int16_t critical)
+	bool PokemenProperty::SetCritical(Value critical)
 	{
 		m_critical = critical;
 		return false;
 	}
 
-	bool PokemenProperty::SetHitratio(int16_t hitratio)
+	bool PokemenProperty::SetHitratio(Value hitratio)
 	{
 		m_hitratio = hitratio;
 		return false;
 	}
 
-	bool PokemenProperty::SetParryratio(int16_t parryratio)
+	bool PokemenProperty::SetParryratio(Value parryratio)
 	{
 		m_parryratio = parryratio;
 		return false;
 	}
 
-	bool PokemenProperty::SetLevel(int16_t level)
+	bool PokemenProperty::SetExp(Value exp)
 	{
-		m_level = level;
+		m_exp = exp;
 		return false;
 	}
 
-	bool PokemenProperty::SetExp(int16_t exp)
+	bool PokemenProperty::SetLevel(Value level)
 	{
-		m_exp = exp;
+		m_level = level;
 		return false;
 	}
 
 	/// <summary>
 /// 
 /// </summary>
-	int16_t PokemenProperty::BreakValueCalculator(int16_t base, int16_t primary_affect, int16_t secondary_affect)
+	Value PokemenProperty::BreakValueCalculator(Value base, Value primary_affect, Value secondary_affect)
 	{
-		return base - (int16_t)100 * (int16_t)std::sqrt((double)primary_affect) + (int16_t)100 * (int16_t)std::sqrt((double)secondary_affect);
+		return base - static_cast<Value>(100.0 * std::sqrt((double)primary_affect) + 100.0 * std::sqrt((double)secondary_affect));
 	}
 
 	/// <summary>
 	/// 
 	/// </summary>
-	int16_t PokemenProperty::CriticalValueCalculator(int16_t base, int16_t affect)
+	Value PokemenProperty::CriticalValueCalculator(Value base, Value affect)
 	{
-		return base + (int16_t)4 * (int16_t)std::sqrt((double)affect);
+		return base + static_cast<Value>(4.0 * std::sqrt((double)affect));
 	}
 
 	/// <summary>
 	/// 
 	/// </summary>
-	int16_t PokemenProperty::HitratioValueCalculator(int16_t base, int16_t primary_affect, int16_t secondary_affect)
+	Value PokemenProperty::HitratioValueCalculator(Value base, Value primary_affect, Value secondary_affect)
 	{
-		return base - (int16_t)4 * (int16_t)std::sqrt((double)primary_affect) + (int16_t)std::sqrt(std::sqrt((double)secondary_affect));
+		return base - static_cast<Value>(4.0 * std::sqrt((double)primary_affect) + std::sqrt(std::sqrt((double)secondary_affect)));
 	}
 
 	/// <summary>
 	/// 
 	/// </summary>
-	int16_t PokemenProperty::ParryratioValueCalculator(int16_t base, int16_t primary_affect, int16_t secondary_affect)
+	Value PokemenProperty::ParryratioValueCalculator(Value base, Value primary_affect, Value secondary_affect)
 	{
-		return base + (int16_t)4 * (int16_t)std::sqrt((double)primary_affect) - (int16_t)std::sqrt((double)secondary_affect);
+		return base + static_cast<Value>(4.0 * std::sqrt((double)primary_affect) - std::sqrt((double)secondary_affect));
 	}
 
 	/// <summary>
 	/// 
 	/// </summary>
-	int16_t PokemenProperty::AttackDamageCalculator(int16_t primary_affect, int16_t secondary_affect)
+	Value PokemenProperty::AttackDamageCalculator(Value primary_affect, Value secondary_affect)
 	{
-		return static_cast<int16_t>(((double)primary_affect * (double)primary_affect) / ((double)primary_affect + (double)secondary_affect));
+		return static_cast<Value>(((double)primary_affect * (double)primary_affect) / ((double)primary_affect + (double)secondary_affect));
 	}
 
 	/// <summary>
 	/// 
 	/// </summary>
-	int16_t PokemenProperty::HealingHpointsCalculator(int16_t primary_affect, int16_t secondary_affect)
+	Value PokemenProperty::HealingHpointsCalculator(Value primary_affect, Value secondary_affect)
 	{
-		return static_cast<int16_t>((double)primary_affect * ((double)secondary_affect / 200));
+		return static_cast<Value>((double)primary_affect * ((double)secondary_affect / 200.0));
 	}
 
 	/// <summary>
 	/// 
 	/// </summary>
-	int16_t PokemenProperty::BloodingDamageCalculator(int16_t primary_affect, int16_t secondary_affect)
+	Value PokemenProperty::BloodingDamageCalculator(Value primary_affect, Value secondary_affect)
 	{
-		return static_cast<int16_t>(((double)primary_affect * 10.0) / std::sqrt((double)secondary_affect));
+		return static_cast<Value>(((double)primary_affect * 10.0) / std::sqrt((double)secondary_affect));
 	}
 
 	bool BasePlayer::InState(BasePlayer::State inState) const
@@ -241,11 +237,12 @@ namespace Pokemen
 	/// <summary>
 	/// 
 	/// </summary>
-	BasePlayer::BasePlayer(std::string name, int16_t hitpoints, int16_t attack, int16_t defense, int16_t agility, PokemenType type) :
+	BasePlayer::BasePlayer(String name, Value hitpoints, Value attack, Value defense, Value agility, PokemenType type) :
 		PokemenProperty(name, hitpoints, attack, defense, agility, type),
 		m_state(State::NORMAL),
 		m_anger(0),
-		m_hpoints_limitation(hitpoints)
+		m_hpointsLimitation(hitpoints), 
+		m_attackOriginal(attack), m_defenseOriginal(defense), m_agilityOriginal(agility)
 	{
 	}
 
@@ -259,7 +256,7 @@ namespace Pokemen
 	/// <summary>
 	/// 
 	/// </summary>
-	std::string BasePlayer::Attack(HCPokemenPlayer oppoent)
+	String BasePlayer::Attack(HCPokemenPlayer oppoent)
 	{
 		throw std::exception("Not implement class in method Attack()");
 		return false;
@@ -268,7 +265,7 @@ namespace Pokemen
 	/// <summary>
 	/// 
 	/// </summary>
-	int16_t BasePlayer::IsAttacked(int16_t damage)
+	Value BasePlayer::IsAttacked(Value damage)
 	{
 		throw std::exception("Method IsAttacked() in CPokemenPlayer is not implement.");
 	}
@@ -289,13 +286,13 @@ namespace Pokemen
 
 	bool BasePlayer::Update(int extra)
 	{
-		this->m_exp = min(this->m_exp + extra, level_limitation * exp_base - 1);
+		this->m_exp = min(this->m_exp + extra, levelLimitation * expBase - 1);
 
-		int16_t oldlevel = this->m_level;
-		this->m_level = this->m_exp / exp_base + 1;
+		Value oldlevel = this->m_level;
+		this->m_level = this->m_exp / expBase + 1;
 		if (this->m_level > oldlevel)
 		{
-			_level_up_property_distribution();
+			_LevelUpPropertiesDistributor_();
 			return true;
 		}
 		return false;
@@ -309,12 +306,12 @@ namespace Pokemen
 		return this->m_state;
 	}
 
-	int16_t BasePlayer::GetAnger() const
+	Value BasePlayer::GetAnger() const
 	{
 		return this->m_anger;
 	}
 
-	void BasePlayer::_level_up_property_distribution()
+	void BasePlayer::_LevelUpPropertiesDistributor_()
 	{
 	}
 }

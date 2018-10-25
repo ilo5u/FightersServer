@@ -2,24 +2,24 @@
 
 namespace Pokemen
 {
-	static std::vector<std::string> g_Defensivename_Base{ "Caterpie", "Metapod", "Butterfree", "Weedle" };
+	static const Strings NamesOfHedgehog{ "Caterpie", "Metapod", "Butterfree", "Weedle" };
 
 	/// <summary>
 	/// 
 	/// </summary>
-	Hedgehog::Hedgehog(Skill::Type primary_skill, int level) :
+	Hedgehog::Hedgehog(Skill::Type primarySkill, int level) :
 		BasePlayer(
-			g_Defensivename_Base[_Random(g_Defensivename_Base.size())],
-			hitpoints_base + _Random(property_offset),
-			attack_base + _Random(property_offset),
-			defense_base + _Random(property_offset),
-			agility_base + _Random(property_offset),
+			NamesOfHedgehog[_Random(NamesOfHedgehog.size())],
+			hitpointsBase + _Random(propertyOffset),
+			attackBase + _Random(propertyOffset),
+			defenseBase + _Random(propertyOffset),
+			agilityBase + _Random(propertyOffset),
 			PokemenType::HEDGEHOG
 		),
-		m_skill(primary_skill)
+		m_skill(primarySkill)
 	{
-		while (this->m_level < min(level, level_limitation))
-			Update(exp_base);
+		while (this->m_level < std::min<Value>(level, levelLimitation))
+			Update(expBase);
 	}
 
 	/// <summary>
@@ -29,19 +29,19 @@ namespace Pokemen
 	{
 	}
 
-	Hedgehog::Skill::Skill(Type primary_skill)
+	Hedgehog::Skill::Skill(Type primarySkill)
 	{
-		m_primary_skill = primary_skill;
+		m_primarySkill = primarySkill;
 	}
 
-	std::string Hedgehog::Attack(BasePlayer& opponent)
+	String Hedgehog::Attack(BasePlayer& opponent)
 	{
-		return false;
+		return { };
 	}
 
-	int16_t Hedgehog::IsAttacked(int16_t damage)
+	Value Hedgehog::IsAttacked(Value damage)
 	{
-		return int16_t();
+		return Value();
 	}
 
 	bool Hedgehog::SetPrimarySkill(Skill::Type primary_skill)

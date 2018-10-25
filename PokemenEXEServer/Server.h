@@ -1,19 +1,22 @@
 #pragma once
 
 constexpr int USER_NAME_LENGTH = 40;
-typedef char USER_NAME[USER_NAME_LENGTH];
+typedef char Username[USER_NAME_LENGTH];
 
 constexpr int PASSWORD_LENGTH = 80;
-typedef char USER_PASSWORD[PASSWORD_LENGTH];
+typedef char UserPassword[PASSWORD_LENGTH];
 
-class Database;
-typedef Database * HDATABASE;
+typedef Database    * HDatabase;
+typedef UserManager * HUser;
+typedef std::string   String;
+typedef std::mutex    Mutex;
+typedef SOCKET        Socket;
+typedef SOCKADDR_IN   SockaddrIn;
+typedef HANDLE        Handle;
 
-class UserManager;
-typedef UserManager * HUSERMANAGER;
-
-typedef typename std::list<HUSERMANAGER> USER_LIST;
-typedef typename std::mutex MUTEX;
+typedef std::vector<String>       Strings;
+typedef typename std::list<HUser> UserList;
+typedef UserManager::BattleType   BattleType;
 
 class Server
 {
@@ -31,10 +34,10 @@ public:
 			HANDLE_BATTLE_RESULT
 		};
 
-		struct UserInfo
+		struct User
 		{
-			USER_NAME name;
-			USER_PASSWORD password;
+			Username     name;
+			UserPassword password;
 		};
 
 		struct BattleResult
@@ -55,11 +58,11 @@ public:
 		Type type;
 		union Data
 		{
-			UserInfo user_info;
-			BattleResult battle_result;
-			PVP pvp_info;
+			User         user;
+			BattleResult battleResult;
+			PVP          pvp;
 		};
-		Data data;
+		Data  data;
 		ULONG id;
 
 		Message();
@@ -68,6 +71,8 @@ public:
 		Message& operator=(const Message& other);
 		Message& operator=(Message&& other);
 	};
+	typedef std::queue<Message> Messages;
+	typedef Message::Type       MessageType;
 
 public:
 	Server();
@@ -82,36 +87,35 @@ public:
 public:
 	int Init();
 	int Run();
-
 	void WriteMessage(const Message& message);
-	
-	std::string GetClients() const;
+	String GetClients() const;
 
 private:
-	HDATABASE m_hDatabase;
+	// 数据库实例
+	HDatabase   m_hDatabase;
 
-	SOCKET m_serverSocket;
-	SOCKADDR_IN m_serverAddr;
+	// 通信实例
+	Socket      m_serverSocket;
+	SockaddrIn  m_serverAddr;
 
-	MUTEX m_userListMutex;
-	USER_LIST m_userList;
+	Mutex       m_recvMutex;
+	Handle      m_recvEvent;
+	Messages    m_recvMessages;
 
-	MUTEX m_recvMutex;
-	HANDLE m_recvEvent;
-	std::queue<Message> m_recvMessageQueue;
-
-private:
-	int _init_network_();
-	void _deal_with_user_launch_(const Message& message);
-	void _deal_with_user_register_(const Message& message);
-	void _deal_with_user_closed_(const Message& message);
-	void _deal_with_get_online_users_(const Message& message);
-	void _deal_with_battle_result_(const Message& message);
+	// 用户实例
+	UserList    m_userList;
+	Mutex       m_userListMutex;
 
 private:
-	void _accept_();
+	int  _InitNetwork_();
+	void _DealWithUserLaunch_(const Message& message);
+	void _DealWithUserRegister_(const Message& message);
+	void _DealWithUserClosed_(const Message& message);
+	void _DealWithGetOnlineUsers_(const Message& message);
+	void _DealWithBattleResult_(const Message& message);
 
-	void _server_recv_thread_();
-	void _server_send_thread_();
+private:
+	void _ServerAcceptThread_();
+	void _ServerRecvThread_();
+	void _ServerSendThread_();
 };
-typedef Server * HSERVER;
