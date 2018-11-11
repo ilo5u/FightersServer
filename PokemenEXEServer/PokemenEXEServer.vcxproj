@@ -75,8 +75,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\mysql-8.0.12-winx64\lib;C:\mysql-8.0.12-winx64\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
-    <LibraryPath>C:\mysql-8.0.12-winx64\lib;C:\mysql-8.0.12-winx64\include;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
+    <IncludePath>D:\mysql-8.0.12-winx64\lib;D:\mysql-8.0.12-winx64\include;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
+    <LibraryPath>D:\mysql-8.0.12-winx64\lib;D:\mysql-8.0.12-winx64\include;$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(NETFXKitsDir)Lib\um\x64</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -151,10 +151,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Database.h" />
+    <ClInclude Include="Player.h" />
     <ClInclude Include="Pokemen.h" />
-    <ClInclude Include="PokemenManager.h" />
     <ClInclude Include="Server.h" />
-    <ClInclude Include="UserManager.h" />
+    <ClInclude Include="User.h" />
     <ClInclude Include="IO.h" />
     <ClInclude Include="Kernel.h" />
     <ClInclude Include="RandomGenerator.hpp" />
@@ -163,14 +163,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Database.cpp" />
-    <ClCompile Include="EaglePlayer.cpp" />
-    <ClCompile Include="HedgehogPlayer.cpp" />
-    <ClCompile Include="LionPlayer.cpp" />
-    <ClCompile Include="PokemenManager.cpp" />
-    <ClCompile Include="PokemenPlayer.cpp" />
+    <ClCompile Include="Assassin.cpp" />
+    <ClCompile Include="Guardian.cpp" />
+    <ClCompile Include="Knight.cpp" />
+    <ClCompile Include="Pokemen.cpp" />
+    <ClCompile Include="Player.cpp" />
     <ClCompile Include="Server.cpp" />
-    <ClCompile Include="TankPlayer.cpp" />
-    <ClCompile Include="UserManager.cpp" />
+    <ClCompile Include="Master.cpp" />
+    <ClCompile Include="User.cpp" />
     <ClCompile Include="IO.cpp" />
     <ClCompile Include="Kernel.cpp" />
     <ClCompile Include="PokemenEXEServer.cpp" />

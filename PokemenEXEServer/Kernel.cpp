@@ -2,28 +2,52 @@
 #include "Kernel.h"
 #include "Server.h"
 
-constexpr int INSTANCE_EXISTED = 0xFFFFFFFF;
-constexpr int INIT_FAILED = 0xFFFFFFFE;
-constexpr int INIT_SUCCESS = 0x00000000;
-
 typedef Server * HServer;
 static HServer hServer = nullptr;
+static Handle  SingleInstance = nullptr;
 
-int InitServer()
+BOOL __stdcall InitServer()
 {
-	if (hServer)
-		return INSTANCE_EXISTED;
+	try
+	{
+		SingleInstance
+			= CreateEvent(NULL, FALSE, FALSE, L"POKEMENSERVER");
+		if (SingleInstance != NULL
+			&& GetLastError() != ERROR_ALREADY_EXISTS)
+		{
+			if (hServer)
+				throw std::exception("服务器正在运行。\n");
 
-	hServer = new Server{};
-	if (hServer->Init())
-		return INIT_FAILED;
-
-	return INIT_SUCCESS;
+			hServer = new Server{};
+			if (hServer->Init())
+				throw std::exception("初始化服务器失败。\n");
+		}
+	}
+	catch (const std::exception& e)
+	{
+		return FALSE;
+	}
+	return TRUE;
 }
 
-int RunServer()
+BOOL __stdcall RunServer()
 {
-	return hServer->Run();
+	try
+	{
+		if (!hServer->Run())
+			throw std::exception("启动服务器失败。\n");
+	}
+	catch (const std::exception& e)
+	{
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+BOOL __stdcall IsServerOnRunning()
+{
+	return TRUE;
 }
 
 String QueryServer(const char query[])

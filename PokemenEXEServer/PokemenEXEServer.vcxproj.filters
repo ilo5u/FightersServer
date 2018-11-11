@@ -33,16 +33,16 @@
     <ClInclude Include="Database.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="Pokemen.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="PokemenManager.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
     <ClInclude Include="Server.h">
       <Filter>头文件</Filter>
     </ClInclude>
-    <ClInclude Include="UserManager.h">
+    <ClInclude Include="User.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Player.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Pokemen.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
@@ -62,28 +62,28 @@
     <ClCompile Include="Database.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="EaglePlayer.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="HedgehogPlayer.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="LionPlayer.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="PokemenManager.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="PokemenPlayer.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="Server.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="TankPlayer.cpp">
+    <ClCompile Include="Master.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="UserManager.cpp">
+    <ClCompile Include="Knight.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Guardian.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Assassin.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Pokemen.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Player.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="User.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

@@ -1,7 +1,8 @@
 #pragma once
 
-int InitServer();
+BOOL WINAPI InitServer();
+BOOL WINAPI RunServer();
 
-int RunServer();
+BOOL WINAPI IsServerOnRunning();
 
-std::string QueryServer(const char[]);
+String QueryServer(const char[]);

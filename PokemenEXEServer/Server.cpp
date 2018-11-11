@@ -1,8 +1,6 @@
 #include "stdafx.h"
 #include "Database.h"
 
-#include <thread>
-
 typedef Packet::Type PacketType;
 
 constexpr int  PORT = 27893;
@@ -13,57 +11,67 @@ constexpr int  INIT_NETWORK_ERROR  = 0xFFFFFFFF;
 
 constexpr auto DATABASE_USER     = "root";
 constexpr auto DATABASE_PASSWORD = "19981031";
-constexpr auto DATABASE_NAME     = "pokemen_user_database";
+constexpr auto DATABASE_NAME     = "server";
+
+static Strings SplitData(const char data[])
+{
+	String per;
+	Strings ans;
+	for (int pos = 0; pos < std::strlen(data); ++pos)
+	{
+		if (pos == '\n')
+		{
+			ans.push_back(per);
+			per.clear();
+		}
+		else
+		{
+			per.push_back(data[pos]);
+		}
+	}
+	return std::move(ans);
+}
 
 Server::Server() :
 	m_hDatabase{ new Database{} },
 	m_serverSocket(), m_serverAddr(),
-	m_recvMutex(), m_recvEvent(nullptr), m_recvMessages(),
-	m_userList(),
-	m_userListMutex()
+	m_users(), m_userLocker(),
+	m_errorOccured(false)
 {
 }
 
 Server::~Server()
 {
-	WSACleanup();
 	delete m_hDatabase;
 }
 
 int Server::Init()
 {
-	if (m_hDatabase->Connect(DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME))
+	if (!_InitDatabase_())
 		return INIT_DATABASE_ERROR;
 
-	if (_InitNetwork_())
+	if (!_InitNetwork_())
 		return INIT_NETWORK_ERROR;
 
 	return INIT_SUCCESS;
 }
 
-int Server::Run()
+bool Server::Run()
 {
-	Thread acceptThread{ std::bind(&Server::_ServerAcceptThread_, this) };
-	acceptThread.detach();
+	if (this->m_isServerOn)
+		return false;
 
-	m_recvEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-	Thread recvThread{ std::bind(&Server::_ServerRecvThread_, this) };
-	recvThread.detach();
-
-	Thread sendThread{ std::bind(&Server::_ServerSendThread_, this) };
-	sendThread.detach();
-
-	return INIT_SUCCESS;
-}
-
-void Server::WriteMessage(const Message& message)
-{
-	m_recvMutex.lock();
-
-	m_recvMessages.push(message);
-	SetEvent(m_recvEvent);
-
-	m_recvMutex.unlock();
+	/* 创建服务线程 */
+	try
+	{
+		this->m_acceptDriver
+			= std::move(Thread{ std::bind(&Server::_ServerAcceptThread_, this) });
+	}
+	catch (std::exception& e)
+	{
+		return true;
+	}
+	return false;
 }
 
 String Server::GetClients() const
@@ -71,339 +79,460 @@ String Server::GetClients() const
 	String queryResult;
 	char   querySingle[BUFLEN];
 	int    id = 0;
-	for (UserList::const_iterator it = m_userList.begin();
-		it != m_userList.end(); ++it)
+	for (const auto& user : this->m_users)
 	{
 		++id;
-		SOCKADDR_IN addr;
-		addr.sin_addr.S_un.S_addr = (*it)->GetUserID();
-		sprintf(querySingle, "Client %d: ip=%s\n", id, inet_ntoa(addr.sin_addr));
-
+		SockaddrIn addr;
+		addr.sin_addr.S_un.S_addr = user.first;
+		sprintf(querySingle, "用户%d: IP=%s\n", id, inet_ntoa(addr.sin_addr));
 		queryResult += querySingle;
 	}
 
 	if (queryResult.size() == 0)
 	{
-		queryResult = "No clients connected.";
+		queryResult = "无用户连接。\n";
 	}
 	return queryResult;
 }
 
-int Server::_InitNetwork_()
+bool Server::_InitDatabase_()
 {
-	int iRetVal = 0;
-	WSADATA wsaData;
-
-	iRetVal = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if (iRetVal != 0)
-		return iRetVal;
-
-	m_serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (m_serverSocket == INVALID_SOCKET)
-	{
-		WSACleanup();
-		return -1;
-	}
-
-	m_serverAddr.sin_family = AF_INET;
-	m_serverAddr.sin_addr.S_un.S_addr = inet_addr("10.201.6.239");
-	m_serverAddr.sin_port = htons(PORT);
-
-	iRetVal = bind(m_serverSocket, (LPSOCKADDR)&m_serverAddr,
-		sizeof(SOCKADDR));
-	if (iRetVal == SOCKET_ERROR)
-	{
-		closesocket(m_serverSocket);
-		WSACleanup();
-		return -1;
-	}
-
-	iRetVal = listen(m_serverSocket, 0);
-	if (iRetVal == SOCKET_ERROR)
-	{
-		closesocket(m_serverSocket);
-		WSACleanup();
-		return -1;
-	}
-
-	return 0;
+	return m_hDatabase->Connect(DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME);
 }
 
-void Server::_DealWithUserLaunch_(const Message& message)
+bool Server::_InitNetwork_()
 {
-	Strings queryResult;
-	char    szQuery[BUFLEN];
-
-	sprintf(szQuery, "select password from user_launch_info where name='%s'",
-		message.data.user.name);
-	queryResult = m_hDatabase->Select(szQuery, 1);
-
-	m_userListMutex.lock();
-	UserList::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUser& hUserManager) {
-		return hUserManager->GetUserID() == message.id;
-	}); // 查找对应的用户连接实例
-	if (it_user == m_userList.end()) printf("致命错误：查找用户实例失败！\n");
-	else
+	try
 	{
-		Packet packet;
-		if (queryResult.size() > 0)
-		{	// 用户名存在
-			char szPassword[BUFSIZ];
-			sscanf(queryResult[0].c_str(), "%s\n", szPassword);
+		WSADATA wsaData;
 
-			// 优先反馈登陆是否成功
-			if (std::strcmp(szPassword, message.data.user.password) != 0) packet.type = PacketType::LAUNCH_FAILED, printf("登陆失败。\n");
-			else
-			{
-				UserList::iterator it = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUser& hUserManager) {
-					return hUserManager->GetUsername() == message.data.user.name;
-				});
-				if (it != m_userList.end()) packet.type = PacketType::LAUNCH_FAILED, printf("登陆失败。\n");
-				else
-				{
-					(*it_user)->SetUsername(message.data.user.name);
-					packet.type = PacketType::LAUNCH_SUCCESS, printf("登陆成功。\n");
-				}
-			}
-			(*it_user)->WritePacket(packet);
-
-			// 后续反馈登陆成功后用户的相关信息
-			if (packet.type == PacketType::LAUNCH_SUCCESS)
-			{
-				sprintf(szQuery, "select identity,pokemen_property from user_pokemen_info where user_name='%s'",
-					message.data.user.name);
-				queryResult = m_hDatabase->Select(szQuery, 2);
-
-				if (queryResult.size() == 0)
-				{	// 用户没有小精灵
-					printf("用户至注册后第一次登陆。分配小精灵。\n");
-					packet.type = PacketType::DISTRIBUTE_POKEMENS;
-					(*it_user)->WritePacket(packet);
-
-					for (int i = 0; i < 3; ++i)
-					{
-						Pokemen::PokemenManager newPokemen(PokemenType::DEFAULT);
-						sprintf(szQuery,
-							"insert into user_pokemen_info(pokemen_property,user_name) values('NAME=%s,TY=%d,HP=%d,AT=%d,DE=%d,AG=%d,BR=%d,CR=%d,HI=%d,PA=%d,EX=%d,LE=%d','%s')",
-							newPokemen.GetName().c_str(),
-							(int)newPokemen.GetType(),
-							newPokemen.GetHpoints(), newPokemen.GetAttack(), newPokemen.GetDefense(), newPokemen.GetAgility(),
-							newPokemen.GetBreak(), newPokemen.GetCritical(), newPokemen.GetHitratio(), newPokemen.GetParryratio(),
-							newPokemen.GetExp(), newPokemen.GetLevel(),
-							message.data.user.name
-						);
-						m_hDatabase->Insert(szQuery);
-					}
-					// 重新查询小精灵情况 获取ID值
-					sprintf(szQuery, "select identity,pokemen_property from user_pokemen_info where user_name='%s'",
-						message.data.user.name);
-					queryResult = m_hDatabase->Select(szQuery, 2);
-				}
-
-				packet.type = PacketType::INSERT_A_POKEMEN;
-				for (Strings::const_iterator it_result = queryResult.begin();
-					it_result != queryResult.end(); ++it_result)
-				{
-					sprintf(packet.data, "%s", it_result->c_str());
-					(*it_user)->InsertAPokemen(*it_result);
-					(*it_user)->WritePacket(packet);
-				}
-
-				packet.type = PacketType::UPDATE_USERS;
-				sprintf(packet.data, "NAME=%s,STATE=ON\n", (*it_user)->GetUsername().c_str());
-				for (UserList::const_iterator it_other = m_userList.begin();
-					it_other != m_userList.end(); ++it_other)
-				{
-					if (it_other == it_user)
-						continue;
-					(*it_other)->WritePacket(packet);
-				}
-			}
-		}
-		else
+		// 初始化Windows Socket环境
+		if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
 		{
-			printf("登陆失败。\n");
-
-			packet.type = PacketType::LAUNCH_FAILED;
-			(*it_user)->WritePacket(packet);
+			throw std::exception("初始化Windows Socket环境失败。\n");
 		}
-	}
-	m_userListMutex.unlock();
-}
 
-void Server::_DealWithUserRegister_(const Message& message)
-{
-	Strings queryResult;
-	char    szQuery[BUFLEN];
-
-	m_userListMutex.lock();
-	UserList::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUser& hUserManager) {
-		return hUserManager->GetUserID() == message.id;
-	});
-	if (it_user == m_userList.end()) printf("致命错误：查找用户实例失败！\n");
-	else
-	{
-		sprintf(szQuery, "insert into user_launch_info values('%s','%s')",
-			message.data.user.name, message.data.user.password);
-
-		Packet packet;
-		if (m_hDatabase->Insert(szQuery))
-			packet.type = PacketType::REGISTER_SUCCESS, printf("注册成功。\n");
-		else
-			packet.type = PacketType::REGISTER_FAILED, printf("注册失败。\n");
-		(*it_user)->WritePacket(packet);
-	}
-	m_userListMutex.unlock();
-}
-
-void Server::_DealWithUserClosed_(const Message& message)
-{
-	Strings queryResult;
-
-	m_userListMutex.lock();
-	UserList::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUser& hUserManager) {
-		return hUserManager->GetUserID() == message.id;
-	});
-	if (it_user == m_userList.end()) printf("致命错误：查找用户实例失败！\n");
-	else
-	{
-		Packet packet;
-		packet.type = PacketType::UPDATE_USERS;
-		sprintf(packet.data, "NAME=%s,STATE=OFF\n", (*it_user)->GetUsername().c_str());
-		for (UserList::const_iterator it = m_userList.begin();
-			it != m_userList.end(); ++it)
+		// 创建新的完成端口
+		if ((this->m_completionPort = CreateIoCompletionPort(
+			INVALID_HANDLE_VALUE, NULL, 0, 0)
+			) == NULL)
 		{
-			if (it == it_user)
-				continue;
-			(*it)->WritePacket(packet);
+			throw std::exception("资源不足，无法创建完成端口。\n");
 		}
 
-		delete *it_user;
-		*it_user = nullptr;
 
-		m_userList.erase(it_user);
-	}
-	m_userListMutex.unlock();
-}
+		SYSTEM_INFO SystemInfo; // 系统信息
+		GetSystemInfo(&SystemInfo);
+		// 根据CPU数量启动线程
+		for (int i = 0; i < (int)SystemInfo.dwNumberOfProcessors * 2; ++i)
+		{ // 创建线程，运行ServerWorkerThread
+			this->m_workers.push_back(
+				std::move(Thread{ std::bind(&Server::_WorkerThread_, this) })
+			);
+		}
 
-void Server::_DealWithGetOnlineUsers_(const Message& message)
-{
-	m_userListMutex.lock();
-	UserList::iterator it_user = std::find_if(m_userList.begin(), m_userList.end(), [&message](const HUser& hUserManager) {
-		return hUserManager->GetUserID() == message.id;
-	});
-	if (it_user == m_userList.end()) printf("致命错误：查找用户实例失败！\n");
-	else
-	{
-		char   szUserNames[BUFLEN];
-		int    cnt = 0;
-		Packet packet;
-		packet.type = PacketType::SET_ONLINE_USERS;
-
-		ZeroMemory(szUserNames, sizeof(szUserNames));
-		for (UserList::const_iterator it_other = m_userList.begin();
-			it_other != m_userList.end(); ++it_other)
+		// 创建监听Socket
+		if ((this->m_serverSocket = WSASocket(AF_INET, SOCK_STREAM, 0, NULL, 0,
+			WSA_FLAG_OVERLAPPED)) == INVALID_SOCKET)
 		{
-			if ((*it_other)->GetUserID() == message.id) continue;
-
-			++cnt;
-			sprintf(szUserNames + std::strlen(szUserNames), "%s,", (*it_other)->GetUsername().c_str());
-			if (cnt == 20)
-			{
-				sprintf(packet.data, "TOTAL=20,%s", szUserNames);
-				(*it_user)->WritePacket(packet);
-
-				cnt = 0;
-				ZeroMemory(szUserNames, sizeof(szUserNames));
-			}
+			WSACleanup();
+			throw std::exception("资源不足，无法创建Socket。\n");
 		}
-		sprintf(packet.data, "TOTAL=%d,%s", cnt, szUserNames);
-		(*it_user)->WritePacket(packet);
-	}
-	m_userListMutex.unlock();
-}
 
-void Server::_DealWithBattleResult_(const Message& message)
-{
-}
+		m_serverAddr.sin_family = AF_INET;
+		m_serverAddr.sin_addr.S_un.S_addr = inet_addr("10.201.6.248");
+		m_serverAddr.sin_port = htons(PORT);
 
-void Server::_ServerAcceptThread_()
-{
-	SockaddrIn clientAddr;
-	int clientAddrLen = sizeof(SockaddrIn);
-	while (true)
-	{
-		Socket connectSocket = accept(m_serverSocket, (LPSOCKADDR)&clientAddr,
-			&clientAddrLen);
-		if (connectSocket == INVALID_SOCKET)
+		if (bind(m_serverSocket, (LPSOCKADDR)&m_serverAddr,
+			sizeof(SOCKADDR)) == SOCKET_ERROR)
 		{
 			closesocket(m_serverSocket);
-			return;
+			WSACleanup();
+			throw std::exception("无法绑定到本地端口。\n");
 		}
 
-		m_userListMutex.lock();
-		m_userList.push_back(new UserManager{ connectSocket, clientAddr, *this });
-		m_userListMutex.unlock();
+		if (listen(m_serverSocket, 0) == SOCKET_ERROR)
+		{
+			closesocket(m_serverSocket);
+			WSACleanup();
+			throw std::exception("监听端口失败。\n");
+		}
+	}
+	catch (const std::exception& e)
+	{
+		return false;
+	}
+	return true;
+}
+
+bool Server::_AnalyzePacket_(SockaddrIn client, const Packet& recv)
+{
+	switch (recv.type)
+	{
+	case PacketType::LOGIN_REQUEST:
+		_DealWithLogin_(client.sin_addr.S_un.S_addr, recv.data);
+		break;
+
+	case PacketType::LOGON_REQUEST:
+		_DealWithLogon_(client.sin_addr.S_un.S_addr, recv.data);
+		break;
+
+	case PacketType::LOGOUT:
+		_DealWithLogout_(client.sin_addr.S_un.S_addr);
+		break;
+
+	case PacketType::PVE_RESULT:
+		_DealWithPVEResult_(client.sin_addr.S_un.S_addr, recv.data);
+		break;
+
+	default:
+		break;
+	}
+	return false;
+}
+
+#define INSERT_POKEMEN_QUERYSTRING 	"\
+insert into pokemens(user,type,name,\
+hpoints,attack,defense,agility,break,critical,hitratio,parryratio,\
+career,exp,level) values('%s',%d,'%s',\
+%d,%d,%d,%d,%d,%d,%d,%d,\
+%d,%d,%d)"
+
+#define SELECT_POKEMEN_QUERYSTRING 	"\
+select identity,type,name,\
+hpoints,attack,defense,agility,break,critical,hitratio,parryratio,\
+career,exp,level from pokemens where user='%s'"
+
+void Server::_DealWithLogin_(ULONG identity, const char data[])
+{
+	Strings queryResult;
+	char    szQuery[BUFLEN];
+
+	Strings userInfos = SplitData(data);
+	Packet  send;
+	try
+	{
+		sprintf(szQuery, 
+			"select numberOfPokemens from user_launch_info where name='%s',password='%s'",
+			userInfos[0].c_str(), userInfos[1].c_str());
+		queryResult = m_hDatabase->Select(szQuery, 1);
+
+		this->m_userLocker.lock();
+		if (this->m_users[identity] != nullptr)
+		{
+			HUser user = this->m_users[identity];
+			this->m_userLocker.unlock();
+
+			// 反馈登陆信息
+			if (queryResult.empty())
+				send.type = PacketType::LOGIN_FAILED;
+			else
+			{
+				send.type = PacketType::LOGIN_SUCCESS;
+				user->SetUsername(userInfos[0]);
+				sprintf(send.data, "%s\n", queryResult[0]);
+			}
+			_SendPacket_(user, send);
+
+			// 反馈在线用户以及小精灵信息
+			if (send.type == PacketType::LOGIN_SUCCESS)
+			{
+				int numberOfPokemens = std::atoi(queryResult[0].c_str());
+				if (numberOfPokemens == 0)
+				{
+					/* 用户第一次登陆，随机生成三只小精灵 */
+					Pokemen::Pokemen pokemen{ PokemenType::DEFAULT, 0x1 };
+					sprintf(szQuery, INSERT_POKEMEN_QUERYSTRING,
+						userInfos[0].c_str(),
+						(int)pokemen.GetType(), pokemen.GetName(),
+						pokemen.GetHpoints(), pokemen.GetAttack(),
+						pokemen.GetDefense(), pokemen.GetAgility(),
+						pokemen.GetInterval(), pokemen.GetCritical(),
+						pokemen.GetHitratio(), pokemen.GetParryratio(),
+						pokemen.GetCareer(),
+						pokemen.GetExp(), pokemen.GetLevel()
+					);
+					this->m_hDatabase->Insert(szQuery);
+				}
+
+				/* 从数据库取出小精灵信息 */
+				sprintf(szQuery, SELECT_POKEMEN_QUERYSTRING, userInfos[0].c_str());
+				queryResult = this->m_hDatabase->Select(szQuery, 14);
+				for (const auto& pokemen : queryResult)
+				{
+					user->InsertAPokemen(pokemen);
+					sprintf(send.data, pokemen.c_str());
+					_SendPacket_(user, send);
+				}
+
+				send.type = PacketType::UPDATE_ONLINE_USERS;
+				sprintf(send.data, "%s\nON\n", userInfos[0].c_str());
+				this->m_userLocker.lock();
+				for (const auto& other : this->m_users)
+				{
+					if (other.first != identity)
+					{
+						_SendPacket_(other.second, send);
+					}
+				}
+				this->m_userLocker.unlock();
+			}
+		}
+		else
+		{
+			this->m_userLocker.unlock();
+		}
+	}
+	catch (const std::exception& e)
+	{
+		
 	}
 }
 
-void Server::_ServerRecvThread_()
+void Server::_DealWithLogon_(ULONG identity, const char data[])
 {
-	Message message;
 	Strings queryResult;
-	while (true)
-	{
-		WaitForSingleObject(m_recvEvent, 2000);
-		m_recvMutex.lock();
-		ResetEvent(m_recvEvent);
+	char    szQuery[BUFLEN];
 
-		bool recvValid = false;
-		if (!m_recvMessages.empty())
+	Strings userInfos = SplitData(data);
+	Packet  send;
+	try
+	{
+		this->m_userLocker.lock();
+		HUser user = this->m_users[identity];
+		this->m_userLocker.unlock();
+		if (user != nullptr)
 		{
-			recvValid = true;
-			message = m_recvMessages.front();
-			m_recvMessages.pop();
+			sprintf(szQuery,
+				"insert into user values('%s','%s',0)",
+				userInfos[0].c_str(), userInfos[1].c_str()
+			);
+
+			if (this->m_hDatabase->Insert(szQuery))
+				send.type = PacketType::LOGON_SUCCESS;
+			else
+				send.type = PacketType::LOGON_FAILED;
+			_SendPacket_(user, send);
+		}
+	}
+	catch (const std::exception& e)
+	{
+		
+	}
+}
+
+void Server::_DealWithLogout_(ULONG identity)
+{
+	Strings queryResult;
+	Packet send;
+	try
+	{
+		this->m_userLocker.lock();
+		HUser user = this->m_users[identity];
+		this->m_userLocker.unlock();
+		if (user != nullptr)
+		{
+			send.type = PacketType::UPDATE_ONLINE_USERS;
+			sprintf(send.data, "%s\nOFF\n", user->GetUsername().c_str());
+			for (auto& other : this->m_users)
+			{
+				if (other.first != identity)
+				{
+					_SendPacket_(other.second, send);
+				}
+			}
+			this->m_users.erase(identity);
+		}
+	}
+	catch (const std::exception&)
+	{
+		
+	}
+}
+
+void Server::_DealWithGetOnlineUsers_(ULONG identity, const char data[])
+{
+	Packet send;
+	try
+	{
+		this->m_userLocker.lock();
+		HUser user = this->m_users[identity];
+		this->m_userLocker.unlock();
+		if (user != nullptr)
+		{
+			char   szUserNames[BUFLEN];
+			int    cnt = 0;
+			send.type = PacketType::SET_ONLINE_USERS;
+
+			ZeroMemory(szUserNames, sizeof(szUserNames));
+			for (const auto& other : this->m_users)
+			{
+				if (other.first != identity)
+				{
+					++cnt;
+					sprintf(szUserNames + std::strlen(szUserNames),
+						"%s\n", other.second->GetUsername().c_str()
+					);
+					if (cnt == 0)
+					{
+						sprintf(send.data, "20\n%s", szUserNames);
+						_SendPacket_(user, send);
+
+						cnt = 0;
+						ZeroMemory(szUserNames, sizeof(szUserNames));
+					}
+				}
+			}
+			if (cnt > 0)
+			{
+				sprintf(send.data, "%d\n%s", cnt, szUserNames);
+				_SendPacket_(user, send);
+			}
+		}
+	}
+	catch (const std::exception& e)
+	{
+
+	}
+}
+
+void Server::_DealWithPVEResult_(ULONG identity, const char data[])
+{
+}
+
+/* 投递出境数据包 */
+void Server::_SendPacket_(HUser user, const Packet& send)
+{
+	try
+	{
+		LPPER_IO_OPERATION_DATA perIO
+			= (LPPER_IO_OPERATION_DATA)GlobalAlloc(
+				GPTR, 
+				sizeof(PER_IO_OPERATION_DATA)
+			);
+		if (perIO == NULL)
+			throw std::exception("内存不足。\n");
+
+		/* 设置发送对象 */
+		DWORD sendBytes;
+		ZeroMemory(&(perIO->overlapped), sizeof(OVERLAPPED));
+		std::memcpy(perIO->buffer, (LPCH)&send, sizeof(Packet));
+		perIO->dataBuf.buf = perIO->buffer;
+		perIO->dataBuf.len = DATA_BUFSIZE;
+		perIO->opType = OPERATION_TYPE::SEND_POSTED;
+		perIO->sendBytes = 0;
+		perIO->totalBytes = DATA_BUFSIZE;
+
+		if (WSASend(user->m_client, &(perIO->dataBuf), 1, &sendBytes, 0,
+			&(perIO->overlapped), NULL) == SOCKET_ERROR)
+		{
+			if (WSAGetLastError() != ERROR_IO_PENDING)
+				throw std::exception("网络异常。\n");
+		}
+	}
+	catch (const std::exception& e)
+	{
+		
+	}
+}
+
+void Server::_WorkerThread_()
+{
+	DWORD bytesTransferred; // 数据传输的字节数
+	LPPER_HANDLE_DATA perClient; // Socket句柄结构体
+	LPPER_IO_OPERATION_DATA perIO; // I/O操作结构体
+	DWORD flags;
+	DWORD recvBytes;
+	DWORD sendBytes;
+
+	Packet recv;
+
+	while (!this->m_errorOccured)
+	{
+		// 检查完成端口的状态
+		if (GetQueuedCompletionStatus(this->m_completionPort, &bytesTransferred,
+			(PULONG_PTR)&perClient, (LPOVERLAPPED*)&perIO, INFINITE) == 0
+			&& bytesTransferred != 0)
+		{
+			if (perClient != NULL)
+			{
+				closesocket(perClient->client);
+				GlobalFree(perClient);
+				GlobalFree(perIO);
+			}
+			continue;
 		}
 
-		m_recvMutex.unlock();
-
-		if (recvValid)
+		// 如果数据传送完了，则退出（close）
+		if (bytesTransferred == 0
+			&& (perIO->opType == OPERATION_TYPE::RECV_POSTED || perIO->opType == OPERATION_TYPE::SEND_POSTED))
 		{
-			switch (message.type)
+			closesocket(perClient->client);
+			GlobalFree(perClient);
+			GlobalFree(perIO);
+			continue;
+		}
+		else if (perIO != NULL && perClient != NULL)
+		{
+			switch (perIO->opType)
 			{
-			case MessageType::USER_LAUNCH:
+			case OPERATION_TYPE::RECV_POSTED:
 			{
-				_DealWithUserLaunch_(message);
-				//std::thread thread{ std::bind(&Server::_DealWithUserLaunch_, this) };
-				//thread.detach();
+				perIO->buffer[bytesTransferred] = 0x0;
+				std::memcpy((LPCH)&recv, perIO->buffer, sizeof(Packet));
+				_AnalyzePacket_(perClient->addr, recv);
+
+				// 初始化I/O操作结构体
+				ZeroMemory(&(perIO->overlapped), sizeof(OVERLAPPED));
+				perIO->dataBuf.len = DATA_BUFSIZE;
+				perIO->dataBuf.buf = perIO->buffer;
+				perIO->opType = OPERATION_TYPE::RECV_POSTED;
+				flags = 0;
+
+				// 接收数据，放到PerIoData中
+				// 而PerIoData又通过工作线程中的ServerWorkerThread函数取出
+				if (WSARecv(perClient->client, &(perIO->dataBuf), 1, &recvBytes, &flags,
+					&(perIO->overlapped), NULL) == SOCKET_ERROR)
+				{
+					if (WSAGetLastError() != ERROR_IO_PENDING 
+						&& perClient != NULL)
+					{
+						closesocket(perClient->client);
+						GlobalFree(perClient);
+						GlobalFree(perIO);
+					}
+				}
+
 			}
 			break;
 
-			case MessageType::USER_REGISTER:
+			case OPERATION_TYPE::SEND_POSTED:
 			{
-				_DealWithUserRegister_(message);
-				//std::thread thread{ std::bind(&Server::_DealWithUserRegister_, this) };
-				//thread.detach();
-			}
-			break;
+				perIO->sendBytes += bytesTransferred;
+				if (perIO->sendBytes <= perIO->totalBytes)
+				{
+					/* 数据未发送完毕 继续投递 */
+					ZeroMemory(&(perIO->overlapped), sizeof(OVERLAPPED));
+					perIO->dataBuf.buf = perIO->buffer + bytesTransferred;
+					perIO->dataBuf.len = DATA_BUFSIZE - perIO->sendBytes;
 
-			case MessageType::USER_CLOSED:
-			{
-				_DealWithUserClosed_(message);
-				//std::thread thread{ std::bind(&Server::_DealWithUserClosed_, this) };
-				//thread.detach();
-			}
-			break;
-
-			case MessageType::GET_ONLINE_USERS:
-			{
-				_DealWithGetOnlineUsers_(message);
-			}
-			break;
-
-			case MessageType::HANDLE_BATTLE_RESULT:
-			{
-				_DealWithBattleResult_(message);
+					if (WSASend(perClient->client, &(perIO->dataBuf), 1, &sendBytes, 0,
+						&(perIO->overlapped), NULL) == SOCKET_ERROR)
+					{
+						if (WSAGetLastError() != ERROR_IO_PENDING
+							&& perClient != NULL)
+						{
+							closesocket(perClient->client);
+							GlobalFree(perClient);
+							GlobalFree(perIO);
+						}
+					}
+				}
+				else
+				{
+					GlobalFree(perClient);
+					GlobalFree(perIO);
+				}
 			}
 			break;
 
@@ -414,109 +543,96 @@ void Server::_ServerRecvThread_()
 	}
 }
 
-void Server::_ServerSendThread_()
+void Server::_ServerAcceptThread_()
 {
-	while (true)
+	SockaddrIn clientAddr;
+	int clientAddrLen = sizeof(SockaddrIn);
+	LPPER_HANDLE_DATA perClient;
+	LPPER_IO_OPERATION_DATA perIO;
+	DWORD recvBytes;
+	DWORD flags;
+	try
 	{
+		while (!this->m_errorOccured)
+		{
+			Socket client
+				= WSAAccept(this->m_serverSocket,
+				(LPSOCKADDR)&clientAddr,
+					&clientAddrLen,
+					NULL,
+					0);
+			if (client == SOCKET_ERROR)
+			{
+				closesocket(this->m_serverSocket);
+				WSACleanup();
+				this->m_errorOccured = true;
+				throw std::exception("网络异常。\n");
+			}
 
+			this->m_userLocker.lock();
+			if (this->m_users[clientAddr.sin_addr.S_un.S_addr]
+				!= nullptr)
+			{
+				delete m_users[clientAddr.sin_addr.S_un.S_addr];
+			}
+			this->m_users[clientAddr.sin_addr.S_un.S_addr]
+				= new User{ clientAddr };
+			this->m_userLocker.unlock();
+
+			// 分配并设置Socket句柄结构体
+			if ((perClient = (LPPER_HANDLE_DATA)GlobalAlloc(
+				GPTR, sizeof(PER_HANDLE_DATA)
+			)) == NULL)
+			{
+				throw std::exception("内存不足。\n");
+			}
+			perClient->client = client;
+			perClient->addr = clientAddr;
+
+			// 将与客户端进行通信的套接字Accept与完成端口CompletionPort相关联
+			if (CreateIoCompletionPort(
+				(HANDLE)client, this->m_completionPort, (DWORD)perClient, 0
+			) == NULL)
+			{
+				throw std::exception("网络异常。\n");
+			}
+
+			// 为I/O操作结构体分配内存空间
+			if ((perIO = (LPPER_IO_OPERATION_DATA)GlobalAlloc(
+				GPTR, sizeof(PER_IO_OPERATION_DATA)
+			)) == NULL)
+			{
+				throw std::exception("内存不足。\n");
+			}
+
+			// 初始化I/O操作结构体
+			ZeroMemory(&(perIO->overlapped), sizeof(OVERLAPPED));
+			perIO->dataBuf.len = DATA_BUFSIZE;
+			perIO->dataBuf.buf = perIO->buffer;
+			perIO->opType = OPERATION_TYPE::RECV_POSTED;
+			flags = 0;
+
+			// 接收数据，放到PerIoData中
+			// 而PerIoData又通过工作线程中的ServerWorkerThread函数取出
+			if (WSARecv(client, &(perIO->dataBuf), 1, &recvBytes, &flags,
+				&(perIO->overlapped), NULL) == SOCKET_ERROR)
+			{
+				if (WSAGetLastError() != ERROR_IO_PENDING)
+				{
+					throw std::exception("网络异常。\n");
+				}
+			}
+		}
 	}
-}
-
-Server::Message::Message()
-{
-	std::memset(&data, 0x0, sizeof(data));
-}
-
-Server::Message::Message(const Message& other) :
-	type(other.type)
-{
-	switch (type)
+	catch (const std::exception& e)
 	{
-	case Type::USER_LAUNCH:
-	case Type::USER_REGISTER:
-	case Type::HANDLE_BATTLE_RESULT:
-		std::strncpy(data.user.name, other.data.user.name, USER_NAME_LENGTH);
-		std::strncpy(data.user.password, other.data.user.password, PASSWORD_LENGTH);
-		id = other.id;
-		break;
-
-	case Type::USER_CLOSED:
-	case Type::GET_ONLINE_USERS:
-		id = other.id;
-		break;
-
-	default:
-		break;
+		/* 清理所有的通信线程 */
+		std::for_each(this->m_workers.begin(), this->m_workers.end(),
+			[](Thread& worker) {
+			if (worker.joinable())
+				worker.join();
+		});
+		this->m_users.clear();
+		this->m_isServerOn = false;
 	}
-}
-
-Server::Message::Message(Message&& other) :
-	type(other.type)
-{
-	switch (type)
-	{
-	case Type::USER_LAUNCH:
-	case Type::USER_REGISTER:
-	case Type::HANDLE_BATTLE_RESULT:
-		std::strncpy(data.user.name, other.data.user.name, USER_NAME_LENGTH);
-		std::strncpy(data.user.password, other.data.user.password, PASSWORD_LENGTH);
-		id = other.id;
-		break;
-
-	case Type::USER_CLOSED:
-	case Type::GET_ONLINE_USERS:
-		id = other.id;
-		break;
-
-	default:
-		break;
-	}
-}
-
-Server::Message& Server::Message::operator=(const Message& other)
-{
-	type = other.type;
-	switch (type)
-	{
-	case Type::USER_LAUNCH:
-	case Type::USER_REGISTER:
-	case Type::HANDLE_BATTLE_RESULT:
-		std::strncpy(data.user.name, other.data.user.name, USER_NAME_LENGTH);
-		std::strncpy(data.user.password, other.data.user.password, PASSWORD_LENGTH);
-		id = other.id;
-		break;
-
-	case Type::USER_CLOSED:
-	case Type::GET_ONLINE_USERS:
-		id = other.id;
-		break;
-
-	default:
-		break;
-	}
-	return *this;
-}
-
-Server::Message& Server::Message::operator=(Message&& other)
-{
-	type = other.type;
-	switch (type)
-	{
-	case Type::USER_LAUNCH:
-	case Type::USER_REGISTER:
-	case Type::HANDLE_BATTLE_RESULT:
-		std::strncpy(data.user.name, other.data.user.name, USER_NAME_LENGTH);
-		std::strncpy(data.user.password, other.data.user.password, PASSWORD_LENGTH);
-		id = other.id;
-		break;
-
-	case Type::USER_CLOSED:
-	case Type::GET_ONLINE_USERS:
-		id = other.id;
-		break;
-
-	default:
-		break;
-	}
-	return *this;
 }

@@ -7,7 +7,7 @@ constexpr int PASSWORD_LENGTH = 80;
 typedef char UserPassword[PASSWORD_LENGTH];
 
 typedef Database    * HDatabase;
-typedef UserManager * HUser;
+typedef User * HUser;
 typedef std::string   String;
 typedef std::mutex    Mutex;
 typedef SOCKET        Socket;
@@ -15,65 +15,37 @@ typedef SOCKADDR_IN   SockaddrIn;
 typedef HANDLE        Handle;
 
 typedef std::vector<String>       Strings;
+typedef std::vector<Thread> Threads;
 typedef typename std::list<HUser> UserList;
-typedef UserManager::BattleType   BattleType;
+typedef User::BattleType   BattleType;
+typedef std::map<ULONG, HUser> Users;
+
+typedef enum class _OPERATION_TYPE
+{
+	SEND_POSTED,
+	RECV_POSTED,
+	NULL_POSTED
+} OPERATION_TYPE;
+
+constexpr int DATA_BUFSIZE = 4096;
+typedef struct
+{
+	OVERLAPPED overlapped; // 重叠结构
+	WSABUF dataBuf; // 缓冲区对象
+	CHAR buffer[DATA_BUFSIZE]; // 缓冲区数组
+	OPERATION_TYPE opType;
+	DWORD sendBytes;
+	DWORD totalBytes;
+} PER_IO_OPERATION_DATA, *LPPER_IO_OPERATION_DATA;
+
+typedef struct
+{
+	SOCKET client;
+	SOCKADDR_IN addr;
+} PER_HANDLE_DATA, *LPPER_HANDLE_DATA;
 
 class Server
 {
-public:
-	struct Message
-	{
-		enum class Type
-		{
-			USER_LAUNCH,
-			USER_REGISTER,
-			USER_CLOSED,
-
-			GET_ONLINE_USERS,
-
-			HANDLE_BATTLE_RESULT
-		};
-
-		struct User
-		{
-			Username     name;
-			UserPassword password;
-		};
-
-		struct BattleResult
-		{
-			UserManager::BattleType battleType;
-			int winner;
-			int rounds;
-			int firstId;
-			int secondId;
-		};
-
-		struct PVP
-		{
-			int firstId;
-			int secondId;
-		};
-
-		Type type;
-		union Data
-		{
-			User         user;
-			BattleResult battleResult;
-			PVP          pvp;
-		};
-		Data  data;
-		ULONG id;
-
-		Message();
-		Message(const Message& other);
-		Message(Message&& other);
-		Message& operator=(const Message& other);
-		Message& operator=(Message&& other);
-	};
-	typedef std::queue<Message> Messages;
-	typedef Message::Type       MessageType;
-
 public:
 	Server();
 	~Server();
@@ -85,9 +57,8 @@ public:
 	Server& operator=(Server&&) = delete;
 
 public:
-	int Init();
-	int Run();
-	void WriteMessage(const Message& message);
+	int  Init();
+	bool Run();
 	String GetClients() const;
 
 private:
@@ -98,24 +69,34 @@ private:
 	Socket      m_serverSocket;
 	SockaddrIn  m_serverAddr;
 
-	Mutex       m_recvMutex;
-	Handle      m_recvEvent;
-	Messages    m_recvMessages;
-
 	// 用户实例
-	UserList    m_userList;
-	Mutex       m_userListMutex;
+	Users m_users;
+	Mutex m_userLocker;
+
+	/* 重叠IO模块 */
+	Handle m_completionPort;
+	Thread m_acceptDriver;
+	Threads m_workers;
+	volatile Boolean m_errorOccured;
+	volatile Boolean m_isServerOn;
 
 private:
-	int  _InitNetwork_();
-	void _DealWithUserLaunch_(const Message& message);
-	void _DealWithUserRegister_(const Message& message);
-	void _DealWithUserClosed_(const Message& message);
-	void _DealWithGetOnlineUsers_(const Message& message);
-	void _DealWithBattleResult_(const Message& message);
+	bool _InitDatabase_();
+	bool _InitNetwork_();
+
+	bool _AnalyzePacket_(SockaddrIn client, const Packet& recv);
+
+	void _DealWithLogin_(ULONG identity, const char data[]);
+	void _DealWithLogon_(ULONG identity, const char data[]);
+	void _DealWithLogout_(ULONG identity);
+
+	void _DealWithGetOnlineUsers_(ULONG identity, const char data[]);
+	void _DealWithPVEResult_(ULONG identity, const char data[]);
+
+	void _SendPacket_(HUser user, const Packet& send);
 
 private:
+	void _WorkerThread_();
 	void _ServerAcceptThread_();
-	void _ServerRecvThread_();
-	void _ServerSendThread_();
+
 };
