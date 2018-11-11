@@ -283,6 +283,7 @@ namespace Pokemen
 		virtual ~Master();
 
 	public:
+		Career::Type GetCareer() const;
 		String Attack(BasePlayer& opponent);
 		Value  IsAttacked(Value damage);
 		bool   SetPrimarySkill(Skill::Type primarySkill);
@@ -374,6 +375,7 @@ namespace Pokemen
 		virtual ~Knight();
 
 	public:
+		Career::Type GetCareer() const;
 		String Attack(BasePlayer& opponent);
 		Value  IsAttacked(Value damage);
 		bool   SetPrimarySkill(Skill::Type skill);
@@ -466,6 +468,7 @@ namespace Pokemen
 		virtual ~Guardian();
 
 	public:
+		Career::Type GetCareer() const;
 		String Attack(BasePlayer& opponent);
 		Value  IsAttacked(Value damage);
 		bool   SetPrimarySkill(Skill::Type primarySkill);
@@ -559,6 +562,7 @@ namespace Pokemen
 		virtual ~Assassin();
 
 	public:
+		Career::Type GetCareer() const;
 		String Attack(BasePlayer& opponent);
 		Value  IsAttacked(Value damage);
 		bool   SetPrimarySkill(Skill::Type primarySkill);

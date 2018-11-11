@@ -9,7 +9,7 @@ namespace Pokemen
 		int hpoints, int attack, int defense, int agility,
 		int interval, int critical, int hitratio, int parryratio,
 		int exp, int level,
-		int id = 0) :
+		int id) :
 		m_id(id), m_type(static_cast<PokemenType>(type)), m_name(name),
 		m_hpoints(hpoints), m_attack(attack), m_defense(defense), m_agility(agility),
 		m_interval(interval), m_critical(critical), m_hitratio(hitratio), m_parryratio(parryratio),
@@ -29,10 +29,11 @@ namespace Pokemen
 		Value hitpoints, Value attack, Value defense, Value agility, 
 		Value interval, Value critical, Value hitratio, Value parryratio,
 		Id id) :
-		m_property(type, name,
-			hitpoints, attack, defense, agility,
-			interval, critical, hitratio, parryratio,
-			id),
+		m_property((int)type, name.c_str(),
+		    (int)hitpoints, (int)attack, (int)defense, (int)agility,
+			(int)interval, (int)critical, (int)hitratio, (int)parryratio,
+			(int)0x0, (int)0x1,
+			(int)id),
 		m_anger(0x0), m_state(State::NORMAL),
 		m_hpointsLimitation(hitpoints),
 		m_effects(), m_stateRoundsCnt()

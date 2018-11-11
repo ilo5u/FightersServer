@@ -41,7 +41,6 @@ BOOL __stdcall RunServer()
 	{
 		return FALSE;
 	}
-
 	return TRUE;
 }
 
@@ -53,7 +52,7 @@ BOOL __stdcall IsServerOnRunning()
 String QueryServer(const char query[])
 {
 	String queryResult;
-	if (std::strcmp(query, "show clients\n") == 0)
+	if (std::strcmp(query, "list users connected") == 0)
 	{
 		queryResult = 
 			hServer->GetClients();

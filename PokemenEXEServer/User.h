@@ -37,11 +37,11 @@ public:
 	String GetUsername() const;
 
 private:
-	// net communication devices
+	/* 连接信息 */
 	const Socket m_client;
 	const SockaddrIn m_clientAddr;
 
-	// unique performance
+	/* 用户信息 */
 	String m_username;
 	Pokemens m_pokemens;
 };

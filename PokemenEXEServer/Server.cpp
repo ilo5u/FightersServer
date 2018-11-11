@@ -36,23 +36,28 @@ Server::Server() :
 	m_hDatabase{ new Database{} },
 	m_serverSocket(), m_serverAddr(),
 	m_users(), m_userLocker(),
-	m_errorOccured(false)
+	m_completionPort(nullptr), 
+	m_acceptDriver(), m_workers(), 
+	m_errorOccured(false),
+	m_isServerOn(false)
 {
 }
 
 Server::~Server()
 {
-	delete m_hDatabase;
+	this->m_isServerOn = false;
+	if (this->m_acceptDriver.joinable())
+		this->m_acceptDriver.join();
+
+	delete this->m_hDatabase;
 }
 
 int Server::Init()
 {
 	if (!_InitDatabase_())
 		return INIT_DATABASE_ERROR;
-
 	if (!_InitNetwork_())
 		return INIT_NETWORK_ERROR;
-
 	return INIT_SUCCESS;
 }
 
@@ -64,14 +69,24 @@ bool Server::Run()
 	/* 创建服务线程 */
 	try
 	{
+		this->m_isServerOn = true;
+		SYSTEM_INFO SystemInfo; // 系统信息
+		GetSystemInfo(&SystemInfo);
+		// 根据CPU数量启动线程
+		for (int i = 0; i < (int)SystemInfo.dwNumberOfProcessors * 2; ++i)
+		{ // 创建线程，运行ServerWorkerThread
+			this->m_workers.push_back(
+				std::move(Thread{ std::bind(&Server::_WorkerThread_, this) })
+			);
+		}
 		this->m_acceptDriver
 			= std::move(Thread{ std::bind(&Server::_ServerAcceptThread_, this) });
 	}
 	catch (std::exception& e)
 	{
-		return true;
+		return false;
 	}
-	return false;
+	return true;
 }
 
 String Server::GetClients() const
@@ -117,18 +132,8 @@ bool Server::_InitNetwork_()
 			INVALID_HANDLE_VALUE, NULL, 0, 0)
 			) == NULL)
 		{
+			WSACleanup();
 			throw std::exception("资源不足，无法创建完成端口。\n");
-		}
-
-
-		SYSTEM_INFO SystemInfo; // 系统信息
-		GetSystemInfo(&SystemInfo);
-		// 根据CPU数量启动线程
-		for (int i = 0; i < (int)SystemInfo.dwNumberOfProcessors * 2; ++i)
-		{ // 创建线程，运行ServerWorkerThread
-			this->m_workers.push_back(
-				std::move(Thread{ std::bind(&Server::_WorkerThread_, this) })
-			);
 		}
 
 		// 创建监听Socket
@@ -151,7 +156,7 @@ bool Server::_InitNetwork_()
 			throw std::exception("无法绑定到本地端口。\n");
 		}
 
-		if (listen(m_serverSocket, 0) == SOCKET_ERROR)
+		if (listen(m_serverSocket, 5) == SOCKET_ERROR)
 		{
 			closesocket(m_serverSocket);
 			WSACleanup();
@@ -160,6 +165,7 @@ bool Server::_InitNetwork_()
 	}
 	catch (const std::exception& e)
 	{
+		fprintf(stdout, "%s\n", e.what());
 		return false;
 	}
 	return true;
@@ -209,7 +215,7 @@ void Server::_DealWithLogin_(ULONG identity, const char data[])
 	char    szQuery[BUFLEN];
 
 	Strings userInfos = SplitData(data);
-	Packet  send;
+	Packet  sendPacket;
 	try
 	{
 		sprintf(szQuery, 
@@ -218,25 +224,26 @@ void Server::_DealWithLogin_(ULONG identity, const char data[])
 		queryResult = m_hDatabase->Select(szQuery, 1);
 
 		this->m_userLocker.lock();
-		if (this->m_users[identity] != nullptr)
+		HUser user = this->m_users[identity];
+		this->m_userLocker.unlock();
+		if (user != nullptr)
 		{
-			HUser user = this->m_users[identity];
-			this->m_userLocker.unlock();
-
 			// 反馈登陆信息
-			if (queryResult.empty())
-				send.type = PacketType::LOGIN_FAILED;
+			if (!user->m_username.empty() || queryResult.empty())
+				sendPacket.type = PacketType::LOGIN_FAILED;
 			else
 			{
-				send.type = PacketType::LOGIN_SUCCESS;
+				sendPacket.type = PacketType::LOGIN_SUCCESS;
 				user->SetUsername(userInfos[0]);
-				sprintf(send.data, "%s\n", queryResult[0]);
+				sprintf(sendPacket.data, "%s\n", queryResult[0].c_str());
 			}
-			_SendPacket_(user, send);
+			_SendPacket_(user, sendPacket);
 
 			// 反馈在线用户以及小精灵信息
-			if (send.type == PacketType::LOGIN_SUCCESS)
+			if (sendPacket.type == PacketType::LOGIN_SUCCESS)
 			{
+				user->m_username = userInfos[0];
+
 				int numberOfPokemens = std::atoi(queryResult[0].c_str());
 				if (numberOfPokemens == 0)
 				{
@@ -244,7 +251,7 @@ void Server::_DealWithLogin_(ULONG identity, const char data[])
 					Pokemen::Pokemen pokemen{ PokemenType::DEFAULT, 0x1 };
 					sprintf(szQuery, INSERT_POKEMEN_QUERYSTRING,
 						userInfos[0].c_str(),
-						(int)pokemen.GetType(), pokemen.GetName(),
+						(int)pokemen.GetType(), pokemen.GetName().c_str(),
 						pokemen.GetHpoints(), pokemen.GetAttack(),
 						pokemen.GetDefense(), pokemen.GetAgility(),
 						pokemen.GetInterval(), pokemen.GetCritical(),
@@ -261,26 +268,22 @@ void Server::_DealWithLogin_(ULONG identity, const char data[])
 				for (const auto& pokemen : queryResult)
 				{
 					user->InsertAPokemen(pokemen);
-					sprintf(send.data, pokemen.c_str());
-					_SendPacket_(user, send);
+					sprintf(sendPacket.data, pokemen.c_str());
+					_SendPacket_(user, sendPacket);
 				}
 
-				send.type = PacketType::UPDATE_ONLINE_USERS;
-				sprintf(send.data, "%s\nON\n", userInfos[0].c_str());
+				sendPacket.type = PacketType::UPDATE_ONLINE_USERS;
+				sprintf(sendPacket.data, "%s\nON\n", userInfos[0].c_str());
 				this->m_userLocker.lock();
 				for (const auto& other : this->m_users)
 				{
 					if (other.first != identity)
 					{
-						_SendPacket_(other.second, send);
+						_SendPacket_(other.second, sendPacket);
 					}
 				}
 				this->m_userLocker.unlock();
 			}
-		}
-		else
-		{
-			this->m_userLocker.unlock();
 		}
 	}
 	catch (const std::exception& e)
@@ -295,7 +298,7 @@ void Server::_DealWithLogon_(ULONG identity, const char data[])
 	char    szQuery[BUFLEN];
 
 	Strings userInfos = SplitData(data);
-	Packet  send;
+	Packet  sendPacket;
 	try
 	{
 		this->m_userLocker.lock();
@@ -309,10 +312,10 @@ void Server::_DealWithLogon_(ULONG identity, const char data[])
 			);
 
 			if (this->m_hDatabase->Insert(szQuery))
-				send.type = PacketType::LOGON_SUCCESS;
+				sendPacket.type = PacketType::LOGON_SUCCESS;
 			else
-				send.type = PacketType::LOGON_FAILED;
-			_SendPacket_(user, send);
+				sendPacket.type = PacketType::LOGON_FAILED;
+			_SendPacket_(user, sendPacket);
 		}
 	}
 	catch (const std::exception& e)
@@ -324,7 +327,7 @@ void Server::_DealWithLogon_(ULONG identity, const char data[])
 void Server::_DealWithLogout_(ULONG identity)
 {
 	Strings queryResult;
-	Packet send;
+	Packet sendPacket;
 	try
 	{
 		this->m_userLocker.lock();
@@ -332,13 +335,13 @@ void Server::_DealWithLogout_(ULONG identity)
 		this->m_userLocker.unlock();
 		if (user != nullptr)
 		{
-			send.type = PacketType::UPDATE_ONLINE_USERS;
-			sprintf(send.data, "%s\nOFF\n", user->GetUsername().c_str());
+			sendPacket.type = PacketType::UPDATE_ONLINE_USERS;
+			sprintf(sendPacket.data, "%s\nOFF\n", user->GetUsername().c_str());
 			for (auto& other : this->m_users)
 			{
 				if (other.first != identity)
 				{
-					_SendPacket_(other.second, send);
+					_SendPacket_(other.second, sendPacket);
 				}
 			}
 			this->m_users.erase(identity);
@@ -352,7 +355,7 @@ void Server::_DealWithLogout_(ULONG identity)
 
 void Server::_DealWithGetOnlineUsers_(ULONG identity, const char data[])
 {
-	Packet send;
+	Packet sendPacket;
 	try
 	{
 		this->m_userLocker.lock();
@@ -362,7 +365,7 @@ void Server::_DealWithGetOnlineUsers_(ULONG identity, const char data[])
 		{
 			char   szUserNames[BUFLEN];
 			int    cnt = 0;
-			send.type = PacketType::SET_ONLINE_USERS;
+			sendPacket.type = PacketType::SET_ONLINE_USERS;
 
 			ZeroMemory(szUserNames, sizeof(szUserNames));
 			for (const auto& other : this->m_users)
@@ -375,8 +378,8 @@ void Server::_DealWithGetOnlineUsers_(ULONG identity, const char data[])
 					);
 					if (cnt == 0)
 					{
-						sprintf(send.data, "20\n%s", szUserNames);
-						_SendPacket_(user, send);
+						sprintf(sendPacket.data, "20\n%s", szUserNames);
+						_SendPacket_(user, sendPacket);
 
 						cnt = 0;
 						ZeroMemory(szUserNames, sizeof(szUserNames));
@@ -385,8 +388,8 @@ void Server::_DealWithGetOnlineUsers_(ULONG identity, const char data[])
 			}
 			if (cnt > 0)
 			{
-				sprintf(send.data, "%d\n%s", cnt, szUserNames);
-				_SendPacket_(user, send);
+				sprintf(sendPacket.data, "%d\n%s", cnt, szUserNames);
+				_SendPacket_(user, sendPacket);
 			}
 		}
 	}
@@ -445,14 +448,14 @@ void Server::_WorkerThread_()
 	DWORD recvBytes;
 	DWORD sendBytes;
 
-	Packet recv;
+	Packet recvPacket;
 
-	while (!this->m_errorOccured)
+	while (!this->m_errorOccured && this->m_isServerOn)
 	{
+		perClient = NULL;
 		// 检查完成端口的状态
 		if (GetQueuedCompletionStatus(this->m_completionPort, &bytesTransferred,
-			(PULONG_PTR)&perClient, (LPOVERLAPPED*)&perIO, INFINITE) == 0
-			&& bytesTransferred != 0)
+			(PULONG_PTR)&perClient, (LPOVERLAPPED*)&perIO, INFINITE) == 0)
 		{
 			if (perClient != NULL)
 			{
@@ -460,63 +463,39 @@ void Server::_WorkerThread_()
 				GlobalFree(perClient);
 				GlobalFree(perIO);
 			}
-			continue;
 		}
-
-		// 如果数据传送完了，则退出（close）
-		if (bytesTransferred == 0
-			&& (perIO->opType == OPERATION_TYPE::RECV_POSTED || perIO->opType == OPERATION_TYPE::SEND_POSTED))
+		else
 		{
-			closesocket(perClient->client);
-			GlobalFree(perClient);
-			GlobalFree(perIO);
-			continue;
-		}
-		else if (perIO != NULL && perClient != NULL)
-		{
-			switch (perIO->opType)
+			// 如果数据传送完了，则退出（close）
+			if (bytesTransferred == 0
+				&& (perIO->opType == OPERATION_TYPE::RECV_POSTED 
+					|| perIO->opType == OPERATION_TYPE::SEND_POSTED))
 			{
-			case OPERATION_TYPE::RECV_POSTED:
-			{
-				perIO->buffer[bytesTransferred] = 0x0;
-				std::memcpy((LPCH)&recv, perIO->buffer, sizeof(Packet));
-				_AnalyzePacket_(perClient->addr, recv);
-
-				// 初始化I/O操作结构体
-				ZeroMemory(&(perIO->overlapped), sizeof(OVERLAPPED));
-				perIO->dataBuf.len = DATA_BUFSIZE;
-				perIO->dataBuf.buf = perIO->buffer;
-				perIO->opType = OPERATION_TYPE::RECV_POSTED;
-				flags = 0;
-
-				// 接收数据，放到PerIoData中
-				// 而PerIoData又通过工作线程中的ServerWorkerThread函数取出
-				if (WSARecv(perClient->client, &(perIO->dataBuf), 1, &recvBytes, &flags,
-					&(perIO->overlapped), NULL) == SOCKET_ERROR)
-				{
-					if (WSAGetLastError() != ERROR_IO_PENDING 
-						&& perClient != NULL)
-					{
-						closesocket(perClient->client);
-						GlobalFree(perClient);
-						GlobalFree(perIO);
-					}
-				}
-
+				closesocket(perClient->client);
+				GlobalFree(perClient);
+				GlobalFree(perIO);
+				continue;
 			}
-			break;
-
-			case OPERATION_TYPE::SEND_POSTED:
+			else if (perIO != NULL && perClient != NULL)
 			{
-				perIO->sendBytes += bytesTransferred;
-				if (perIO->sendBytes <= perIO->totalBytes)
+				switch (perIO->opType)
 				{
-					/* 数据未发送完毕 继续投递 */
-					ZeroMemory(&(perIO->overlapped), sizeof(OVERLAPPED));
-					perIO->dataBuf.buf = perIO->buffer + bytesTransferred;
-					perIO->dataBuf.len = DATA_BUFSIZE - perIO->sendBytes;
+				case OPERATION_TYPE::RECV_POSTED:
+				{
+					perIO->buffer[bytesTransferred] = 0x0;
+					std::memcpy((LPCH)&recvPacket, perIO->buffer, sizeof(Packet));
+					_AnalyzePacket_(perClient->addr, recvPacket);
 
-					if (WSASend(perClient->client, &(perIO->dataBuf), 1, &sendBytes, 0,
+					// 初始化I/O操作结构体
+					ZeroMemory(&(perIO->overlapped), sizeof(OVERLAPPED));
+					perIO->dataBuf.len = DATA_BUFSIZE;
+					perIO->dataBuf.buf = perIO->buffer;
+					perIO->opType = OPERATION_TYPE::RECV_POSTED;
+					flags = 0;
+
+					// 接收数据，放到PerIoData中
+					// 而PerIoData又通过工作线程中的ServerWorkerThread函数取出
+					if (WSARecv(perClient->client, &(perIO->dataBuf), 1, &recvBytes, &flags,
 						&(perIO->overlapped), NULL) == SOCKET_ERROR)
 					{
 						if (WSAGetLastError() != ERROR_IO_PENDING
@@ -527,17 +506,43 @@ void Server::_WorkerThread_()
 							GlobalFree(perIO);
 						}
 					}
-				}
-				else
-				{
-					GlobalFree(perClient);
-					GlobalFree(perIO);
-				}
-			}
-			break;
 
-			default:
+				}
 				break;
+
+				case OPERATION_TYPE::SEND_POSTED:
+				{
+					perIO->sendBytes += bytesTransferred;
+					if (perIO->sendBytes <= perIO->totalBytes)
+					{
+						/* 数据未发送完毕 继续投递 */
+						ZeroMemory(&(perIO->overlapped), sizeof(OVERLAPPED));
+						perIO->dataBuf.buf = perIO->buffer + bytesTransferred;
+						perIO->dataBuf.len = DATA_BUFSIZE - perIO->sendBytes;
+
+						if (WSASend(perClient->client, &(perIO->dataBuf), 1, &sendBytes, 0,
+							&(perIO->overlapped), NULL) == SOCKET_ERROR)
+						{
+							if (WSAGetLastError() != ERROR_IO_PENDING
+								&& perClient != NULL)
+							{
+								closesocket(perClient->client);
+								GlobalFree(perClient);
+								GlobalFree(perIO);
+							}
+						}
+					}
+					else
+					{
+						GlobalFree(perClient);
+						GlobalFree(perIO);
+					}
+				}
+				break;
+
+				default:
+					break;
+				}
 			}
 		}
 	}
@@ -553,7 +558,7 @@ void Server::_ServerAcceptThread_()
 	DWORD flags;
 	try
 	{
-		while (!this->m_errorOccured)
+		while (!this->m_errorOccured && this->m_isServerOn)
 		{
 			Socket client
 				= WSAAccept(this->m_serverSocket,
@@ -566,7 +571,8 @@ void Server::_ServerAcceptThread_()
 				closesocket(this->m_serverSocket);
 				WSACleanup();
 				this->m_errorOccured = true;
-				throw std::exception("网络异常。\n");
+				throw std::exception("网络异常：请求连接断开。\n");
+				continue;
 			}
 
 			this->m_userLocker.lock();
@@ -594,7 +600,7 @@ void Server::_ServerAcceptThread_()
 				(HANDLE)client, this->m_completionPort, (DWORD)perClient, 0
 			) == NULL)
 			{
-				throw std::exception("网络异常。\n");
+				throw std::exception("网络异常：完成端口绑定失败。\n");
 			}
 
 			// 为I/O操作结构体分配内存空间
@@ -619,13 +625,14 @@ void Server::_ServerAcceptThread_()
 			{
 				if (WSAGetLastError() != ERROR_IO_PENDING)
 				{
-					throw std::exception("网络异常。\n");
+					throw std::exception("网络异常：投递入境包失败。\n");
 				}
 			}
 		}
 	}
 	catch (const std::exception& e)
 	{
+		fprintf(stdout, "%s\n", e.what());
 		/* 清理所有的通信线程 */
 		std::for_each(this->m_workers.begin(), this->m_workers.end(),
 			[](Thread& worker) {

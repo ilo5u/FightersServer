@@ -71,6 +71,11 @@ namespace Pokemen
 		this->primarySkill = primarySkill;
 	}
 
+	Assassin::Career::Type Assassin::GetCareer() const
+	{
+		return this->m_career.type;
+	}
+
 	String Assassin::Attack(BasePlayer& opponent)
 	{
 		return {};
@@ -89,10 +94,10 @@ namespace Pokemen
 
 	bool Assassin::Promote(Career::Type career)
 	{
-		if (this->m_career.m_type == Career::Type::Normal)
+		if (this->m_career.type == Career::Type::Normal)
 		{
-			this->m_career.m_type = career;
-			switch (this->m_career.m_type)
+			this->m_career.type = career;
+			switch (this->m_career.type)
 			{
 			case Career::Type::Yodian:
 			{
@@ -140,7 +145,7 @@ namespace Pokemen
 		Value defenseInc = 0;
 		Value agilityInc = 0;
 
-		switch (this->m_career.m_type)
+		switch (this->m_career.type)
 		{
 		case Career::Type::Normal:
 		{

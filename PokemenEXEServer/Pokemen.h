@@ -37,6 +37,7 @@ namespace Pokemen
 		int GetParryratio() const;
 		int GetAnger() const;
 
+		int GetCareer() const;
 		int GetLevel() const;
 		int GetExp() const;
 

@@ -67,6 +67,11 @@ namespace Pokemen
 		this->primarySkill = primarySkill;
 	}
 
+	Master::Career::Type Master::GetCareer() const
+	{
+		return this->m_career.type;
+	}
+
 	/// <summary>
 	/// 
 	/// </summary>

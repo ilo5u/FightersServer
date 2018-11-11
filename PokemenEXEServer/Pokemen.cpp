@@ -5,7 +5,7 @@ namespace Pokemen
 	/// <summary>
 	/// 
 	/// </summary>
-	Pokemen::Pokemen(PokemenType type, int level, Id id = 0) :
+	Pokemen::Pokemen(PokemenType type, int level, Id id) :
 		m_instance(nullptr)
 	{
 		if (type == PokemenType::DEFAULT)
@@ -254,6 +254,32 @@ namespace Pokemen
 			throw std::exception("CPokemenManager is not implement.");
 		else
 			return this->m_instance->GetAnger();
+	}
+
+	int Pokemen::GetCareer() const
+	{
+		if (this->m_instance == nullptr)
+			throw std::exception("CPokemenManager is not implement.");
+		else
+		{
+			switch (this->m_instance->GetType())
+			{
+			case PokemenType::MASTER:
+				return static_cast<int>((static_cast<PMaster>(this->m_instance))->GetCareer());
+
+			case PokemenType::KNIGHT:
+				return static_cast<int>((static_cast<PKnight>(this->m_instance))->GetCareer());
+
+			case PokemenType::GUARDIAN:
+				return static_cast<int>((static_cast<PGuardian>(this->m_instance))->GetCareer());
+
+			case PokemenType::ASSASSIN:
+				return static_cast<int>((static_cast<PAssassin>(this->m_instance))->GetCareer());
+
+			default:
+				throw std::exception("CPokemenManager is not implement.");
+			}
+		}
 	}
 
 	int Pokemen::GetLevel() const

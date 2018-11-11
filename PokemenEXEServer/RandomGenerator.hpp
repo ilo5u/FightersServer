@@ -41,7 +41,7 @@ namespace Pokemen
 
 		std::uniform_int_distribution<> u(0, 100);
 		if (u(g_Rand_Engine) 
-			< (Value)_Random(10) + (Value)(10.0 * std::sqrt(std::max<double>(double(positiveAffect - negativAffect), 0.0))))
+			< (int16_t)_Random(10) + (int16_t)(10.0 * std::sqrt(std::max<double>(double(positiveAffect - negativAffect), 0.0))))
 			return true;
 		else
 			return false;

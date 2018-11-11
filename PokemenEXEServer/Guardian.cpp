@@ -71,6 +71,11 @@ namespace Pokemen
 		this->primarySkill = primarySkill;
 	}
 
+	Guardian::Career::Type Guardian::GetCareer() const
+	{
+		return this->m_career.type;
+	}
+
 	String Guardian::Attack(BasePlayer& opponent)
 	{
 		return { };

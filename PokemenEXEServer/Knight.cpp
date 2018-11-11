@@ -73,6 +73,11 @@ namespace Pokemen
 		this->primarySkill = primarySkill;
 	}
 
+	Knight::Career::Type Knight::GetCareer() const
+	{
+		return this->m_career.type;
+	}
+
 	/// <summary>
 	/// 
 	/// </summary>
@@ -265,13 +270,13 @@ namespace Pokemen
 				}
 			}
 
-			Value damage = opponent.IsAttacked(AttackDamageCalculator(damage, opponent.GetDefense()));
-			if (damage > 0 
+			Value rebounce = opponent.IsAttacked(AttackDamageCalculator(damage, opponent.GetDefense()));
+			if (rebounce > 0 
 				&& this->m_career.type != Career::Type::Ares)
 			{	// 对方开启反甲
 				sprintf(m_battleMessage + std::strlen(m_battleMessage),
-					"受到%d点反伤。", damage);
-				this->m_property.m_hpoints -= damage;
+					"受到%d点反伤。", rebounce);
+				this->m_property.m_hpoints -= rebounce;
 			}
 
 			if (this->m_property.m_hpoints <= 0)

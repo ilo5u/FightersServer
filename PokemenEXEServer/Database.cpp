@@ -18,9 +18,9 @@ bool Database::Connect(const std::string& user, const std::string& password, con
                            user.c_str(), password.c_str(), database.c_str(),
                            0, NULL, 0))
     {
-        return false;
+        return true;
     }
-    return true;
+    return false;
 }
 
 bool Database::Insert(const std::string& query)
