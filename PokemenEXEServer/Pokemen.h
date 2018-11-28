@@ -42,10 +42,13 @@ namespace Pokemen
 		int GetExp() const;
 
 	public:
+		bool Upgrade(int exp);
 		bool SetPrimarySkill(int skill);
 		bool Promote(int career);
+		void RenewProperty(const ::Pokemen::Property& prop, int carrer);
 
 	public:
+		void SetMaxHpoints();
 		bool InState(BasePlayer::State nowState) const;
 
 	public:
@@ -57,10 +60,16 @@ namespace Pokemen
 
 	struct BattleMessage
 	{
+		enum class Type
+		{
+			DISPLAY,
+			RESULT
+		};
+		Type type;
 		String options;
 
 		BattleMessage() = default;
-		BattleMessage(const String& message);
+		BattleMessage(BattleMessage::Type type, const String& message);
 	};
 	typedef std::queue<BattleMessage> BattleMessages;
 

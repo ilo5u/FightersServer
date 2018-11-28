@@ -20,7 +20,7 @@ namespace Pokemen
 		),
 		m_skill(Skill::Type::RAGED),
 		m_career(Career::Type::Normal),
-		m_angriedCnt(0x0)
+		m_angriedCnt(0x1)
 	{
 		this->m_property.m_interval
 			= IntervalValueCalculator(
@@ -54,7 +54,7 @@ namespace Pokemen
 		BasePlayer(prop),
 		m_skill(Skill::Type::RAGED),
 		m_career(career),
-		m_angriedCnt(0x0)
+		m_angriedCnt(0x1)
 	{
 	}
 
@@ -62,9 +62,11 @@ namespace Pokemen
 	{
 	}
 
-	Master::Skill::Skill(Type primarySkill)
+	Master::Skill::Skill(Type primarySkill) :
+		primarySkill(primarySkill),
+		ragedChance(10), selfHealingChance(30),
+		selfHealingIndex(+20), weakenIndex(-20)
 	{
-		this->primarySkill = primarySkill;
 	}
 
 	Master::Career::Type Master::GetCareer() const
@@ -77,18 +79,16 @@ namespace Pokemen
 	/// </summary>
 	String Master::Attack(BasePlayer& opponent)
 	{
-		ZeroMemory(this->m_battleMessage, sizeof(this->m_battleMessage));
+		this->m_battleMessage[0] = 0x0;
 		// 处理异常状态
 		
 		if (this->InState(State::WEAKEN))
 		{
-			if (this->m_stateRoundsCnt.weaken = 1)
+			if (this->m_stateRoundsCnt.weaken == 1)
 			{
 				this->m_property.m_attack -= this->m_effects.weaken.attack;
 				this->m_property.m_defense -= this->m_effects.weaken.defense;
 				this->SubState(State::WEAKEN);
-				sprintf(m_battleMessage + std::strlen(m_battleMessage), 
-					"解除虚弱。");
 			}
 			else
 			{
@@ -102,12 +102,35 @@ namespace Pokemen
 			{
 				this->m_property.m_attack -= this->m_effects.sundered.attack;
 				this->SubState(State::SUNDERED);
-				sprintf(m_battleMessage + std::strlen(m_battleMessage),
-					"武器恢复。");
 			}
 			else
 			{
 				--this->m_stateRoundsCnt.sundered;
+			}
+		}
+
+		if (this->InState(State::SILENT))
+		{
+			if (this->m_stateRoundsCnt.silent == 1)
+			{
+				this->SubState(State::SILENT);
+			}
+			else
+			{
+				--this->m_stateRoundsCnt.silent;
+			}
+		}
+
+		if (this->InState(State::SLOWED))
+		{
+			if (this->m_stateRoundsCnt.slowed == 1)
+			{
+				this->m_property.m_interval -= this->m_effects.slowed.interval;
+				this->SubState(State::SLOWED);
+			}
+			else
+			{
+				--this->m_stateRoundsCnt.slowed;
 			}
 		}
 
@@ -116,101 +139,81 @@ namespace Pokemen
 			if (this->m_stateRoundsCnt.dizzying == 1)
 			{
 				this->SubState(State::DIZZYING);
-				sprintf(m_battleMessage + std::strlen(m_battleMessage),
-					"解除眩晕。");
 			}
 			else
 			{
 				--this->m_stateRoundsCnt.dizzying;
 			}
-			return false;
+			return m_battleMessage;
 		}
 
 		if (this->InState(State::DEAD))
 		{
-			return false;
+			return m_battleMessage;
 		}
 
-		bool hit      = false;
-		bool critical = false;
-		bool anger    = false;
-		int  skill    = -1;
 		if (_Hit_Target(this->m_property.m_hitratio, opponent.GetParryratio()))
 		{	// 命中目标
-			hit = true;
-			Value iAT = this->m_property.m_attack;
+			Value damage = this->m_property.m_attack;
 
 			if (_Hit_Target(this->m_property.m_critical, opponent.GetCritical())) 
 			{ // 暴击
-				critical = true;
-				iAT = static_cast<Value>((double)iAT * 1.5);
+				damage = static_cast<Value>((double)damage * 1.5);
 			}
 
 			if (!this->InState(State::SILENT) && this->InState(State::ANGRIED))
 			{
-				anger = true;
-				skill = 2;
 				// 重设怒气值
 				this->m_anger = 0;
 				this->SubState(State::ANGRIED);
 
-				if (this->m_property.m_hpoints / (this->m_angriedCnt * this->m_angriedCnt) == 0)
+				if (this->m_property.m_hpoints < (this->m_angriedCnt * this->m_angriedCnt * this->m_angriedCnt))
 				{
 					// 治愈系技能使用过度 强制使用攻击增益BUFF
-					sprintf(m_battleMessage + std::strlen(m_battleMessage),
-						"发动狂暴技能：强攻，增加%d点攻击力。", static_cast<Value>((double)this->m_property.m_attack / 20.0));
+					int inc = 0;
 					switch (this->m_career.type)
 					{
 					case Career::Type::Normal:
-					{
-						this->m_property.m_attack += static_cast<Value>((double)this->m_property.m_attack / 20.0);
-					}
+						inc = static_cast<Value>((double)this->m_property.m_attack / 10.0);
 					break;
 
 					case Career::Type::GreatMasterOfLight:
-					{
-						this->m_property.m_attack += static_cast<Value>((double)this->m_property.m_attack / 50.0);
-					}
+						inc = static_cast<Value>((double)this->m_property.m_attack / 20.0);
 					break;
 
 					case Career::Type::GreatMasterOfDark:
-					{
-						this->m_property.m_attack += static_cast<Value>((double)this->m_property.m_attack / 10.0);
-					}
+						inc = static_cast<Value>((double)this->m_property.m_attack / 5.0);
 					break;
 
 					default:
 						break;
 					}
+					sprintf(m_battleMessage + std::strlen(m_battleMessage),
+						"致命打击，增加%d点攻击力。", inc);
+					this->m_property.m_attack += inc;
 				}
 				else
 				{
 					// 治愈系技能
 					sprintf(m_battleMessage + std::strlen(m_battleMessage),
-						"发动狂暴技能：死者苏生，恢复%d点生命值。", 
+						"死者苏生，恢复%d点生命值。", 
 						static_cast<Value>((double)this->m_property.m_hpoints / ((double)this->m_angriedCnt * (double)this->m_angriedCnt)));
 					this->m_property.m_hpoints = std::min<Value>(
 						this->m_hpointsLimitation,
-						this->m_property.m_hpoints + static_cast<Value>((double)this->m_property.m_hpoints / ((double)this->m_angriedCnt * (double)this->m_angriedCnt))
+						this->m_property.m_hpoints + (this->m_career.type == Career::Type::GreatMasterOfLight ? 2 : 1) * static_cast<Value>((double)this->m_property.m_hpoints / ((double)this->m_angriedCnt * (double)this->m_angriedCnt))
 						);
 					switch (this->m_career.type)
 					{
 					case Career::Type::Normal:
-					{
-						this->m_angriedCnt += 3;
-					}
+						this->m_angriedCnt += 4;
 					break;
 
 					case Career::Type::GreatMasterOfLight:
-					{
-						this->m_angriedCnt += 2;
-					}
+						this->m_angriedCnt += 3;
 					break;
 
 					case Career::Type::GreatMasterOfDark:
-					{
-						this->m_angriedCnt += 4;
-					}
+						this->m_angriedCnt += 5;
 					break;
 
 					default:
@@ -221,8 +224,7 @@ namespace Pokemen
 				if (!this->InState(State::WEAKEN))
 				{
 					// 狂暴后进入虚弱状态
-					sprintf(m_battleMessage + std::strlen(m_battleMessage), "狂暴之后进入虚弱状态。");
-					this->AddState(State::WEAKEN);
+					sprintf(m_battleMessage + std::strlen(m_battleMessage), "虚弱。");
 
 					this->m_effects.weaken.attack = ConvertValueByPercent(this->m_property.m_attack, this->m_skill.weakenIndex);
 					this->m_effects.weaken.defense = ConvertValueByPercent(this->m_property.m_defense, this->m_skill.weakenIndex);
@@ -230,6 +232,7 @@ namespace Pokemen
 					this->m_property.m_defense += this->m_effects.weaken.defense;
 
 					this->SetWeakenRounds(CommonBasicValues::weakenRounds);
+					this->AddState(State::WEAKEN);
 				}
 			}
 			else if (!this->InState(State::SILENT))
@@ -238,22 +241,20 @@ namespace Pokemen
 				{
 				case Skill::Type::RAGED:
 				{
-					if (_Hit_Target(this->m_skill.ragedChance, 0x0))
+					if (_Hit_Target(this->m_skill.ragedChance, 0))
 					{
 						sprintf(m_battleMessage + std::strlen(m_battleMessage), 
-							"发动技能：愤怒，使自身在下次被攻击时获得双倍的狂暴点。");
+							"愤怒。");
 
-						skill = 0;
 						this->AddState(State::RAGED);
 					}
-					else if (_Hit_Target(this->m_skill.selfHealingChance, 0x0))
+					else if (_Hit_Target(this->m_skill.selfHealingChance, 5))
 					{
 						sprintf(m_battleMessage + std::strlen(m_battleMessage), 
-							"发动技能：治愈，恢复%d点生命值。",
+							"自愈，回复%d点生命值。",
 							HealingHpointsCalculator(this->m_property.m_hpoints, this->m_skill.selfHealingIndex));
 
-						skill = 1;
-						this->m_skill.selfHealingChance = std::max<Value>((Value)5, this->m_skill.selfHealingChance - 1);
+						this->m_skill.selfHealingChance = std::max<Value>((Value)10, this->m_skill.selfHealingChance - 1);
 						this->m_skill.ragedChance = std::min<Value>((Value)30, this->m_skill.ragedChance + 1);
 
 						this->m_property.m_hpoints = std::min<Value>(
@@ -266,14 +267,13 @@ namespace Pokemen
 
 				case Skill::Type::SELF_HEALING:
 				{
-					if (_Hit_Target((Value)100, this->m_skill.selfHealingChance))
+					if (_Hit_Target(this->m_skill.selfHealingChance, 0))
 					{
 						sprintf(m_battleMessage + std::strlen(m_battleMessage), 
-							"发动技能：治愈，恢复%d点生命值。",
+							"自愈，回复%d点生命值。",
 							HealingHpointsCalculator(this->m_property.m_hpoints, this->m_skill.selfHealingIndex));
 
-						skill = 1;
-						this->m_skill.selfHealingChance = std::max<Value>((Value)10, this->m_skill.selfHealingChance - 1);
+						this->m_skill.selfHealingChance = std::max<Value>((Value)15, this->m_skill.selfHealingChance - 1);
 						this->m_skill.ragedChance = std::min<Value>((Value)20, this->m_skill.ragedChance + 1);
 
 						this->m_property.m_hpoints = std::min<Value>(
@@ -281,12 +281,11 @@ namespace Pokemen
 							this->m_hpointsLimitation
 							);
 					}
-					else if (_Hit_Target((Value)100, this->m_skill.ragedChance))
+					else if (_Hit_Target(this->m_skill.ragedChance, 5))
 					{
 						sprintf(m_battleMessage + std::strlen(m_battleMessage),
-							"发动技能：愤怒，使自身在下次被攻击时获得双倍的狂暴点。");
+							"愤怒。");
 
-						skill = 0;
 						this->AddState(State::RAGED);
 					}
 				}
@@ -295,34 +294,33 @@ namespace Pokemen
 				default:
 					break;
 				}
-
-				// 攻击敌方小精灵
+			}
+			// 攻击敌方小精灵
+			sprintf(m_battleMessage + std::strlen(m_battleMessage),
+				"造成%d点伤害。",
+				AttackDamageCalculator(damage, opponent.GetDefense()));
+			Value rebounce = opponent.IsAttacked(AttackDamageCalculator(damage, opponent.GetDefense()));
+			if (rebounce > 0)
+			{	// 对方开启反甲
 				sprintf(m_battleMessage + std::strlen(m_battleMessage),
-					"造成%d点伤害。", 
-					AttackDamageCalculator(iAT, opponent.GetDefense()));
-				Value damage = opponent.IsAttacked(AttackDamageCalculator(iAT, opponent.GetDefense()));
-				if (damage > 0)
-				{	// 对方开启反甲
-					sprintf(m_battleMessage + std::strlen(m_battleMessage), 
-						"受到%d点反伤。", damage);
-					this->m_property.m_hpoints -= damage;
-				}
+					"受到%d点反伤。", rebounce);
+				this->m_property.m_hpoints -= rebounce;
+			}
 
-				if (this->m_property.m_hpoints <= 0)
+			if (this->m_property.m_hpoints <= 0)
+			{
+				sprintf(m_battleMessage + std::strlen(m_battleMessage),
+					"小精灵死亡。");
+				this->m_property.m_hpoints = 0;
+				this->m_state = State::DEAD;
+			}
+			else if (this->m_career.type == Career::Type::GreatMasterOfDark)
+			{
+				this->m_anger = std::min<Value>(this->m_anger + Career::Darker::angerExtra, CommonBasicValues::angerLimitation);
+				if (this->m_anger == CommonBasicValues::angerLimitation)
 				{
-					sprintf(m_battleMessage + std::strlen(m_battleMessage), 
-						"小精灵死亡。");
-					this->m_property.m_hpoints = 0;
-					this->m_state = State::DEAD;
-				}
-				else if (this->m_career.type == Career::Type::GreatMasterOfDark)
-				{
-					this->m_anger = std::min<Value>(this->m_anger + Career::Darker::angerExtra, CommonBasicValues::angerLimitation);
-					if (this->m_anger == CommonBasicValues::angerLimitation)
-					{
-						this->m_anger = 0;
-						this->AddState(State::ANGRIED);
-					}
+					this->m_anger = 0;
+					this->AddState(State::ANGRIED);
 				}
 			}
 		}
@@ -349,7 +347,9 @@ namespace Pokemen
 			this->m_property.m_hpoints -= damage;
 			if (this->InState(State::RAGED))
 			{
-				this->m_anger = std::min<Value>(CommonBasicValues::angerLimitation, this->m_anger + CommonBasicValues::angerInc * (Value)2);
+				this->m_anger = std::min<Value>(
+					CommonBasicValues::angerLimitation, this->m_anger + CommonBasicValues::angerInc * (Value)2
+					);
 				this->SubState(State::RAGED);
 			}
 			else
@@ -363,6 +363,9 @@ namespace Pokemen
 			if (this->InState(State::BLEED))
 			{
 				this->m_property.m_hpoints -= BloodingDamageCalculator(CommonBasicValues::bleedDamage, this->m_property.m_defense);
+				sprintf(this->m_battleMessage + std::strlen(this->m_battleMessage),
+					"出血受到%d点伤害。",
+					BloodingDamageCalculator(CommonBasicValues::bleedDamage, this->m_property.m_defense));
 				if (this->m_property.m_hpoints <= 0)
 				{
 					this->m_property.m_hpoints = 0;
@@ -433,7 +436,7 @@ namespace Pokemen
 				= CommonBasicValues::levelupPropertiesInc - attackInc - defenseInc;
 
 			this->m_property.m_hpoints
-				+= static_cast<Value>((double)this->m_property.m_hpoints / 10.0) + CommonBasicValues::hpointsInc;
+				+= static_cast<Value>((double)this->m_property.m_hpoints / 20.0) + CommonBasicValues::hpointsInc;
 		}
 		break;
 
@@ -447,7 +450,7 @@ namespace Pokemen
 				= CommonBasicValues::levelupPropertiesInc - attackInc - defenseInc;
 
 			this->m_property.m_hpoints 
-				+= ConvertValueByPercent(static_cast<Value>((double)this->m_property.m_hpoints / 10.0), Career::Lighter::hpointsIncIndex) + CommonBasicValues::hpointsInc;
+				+= ConvertValueByPercent(static_cast<Value>((double)this->m_property.m_hpoints / 20.0), Career::Lighter::hpointsIncIndex) + CommonBasicValues::hpointsInc;
 		}
 		break;
 
@@ -463,7 +466,7 @@ namespace Pokemen
 				+= ConvertValueByPercent(attackInc, Career::Darker::damageIncIndex);
 
 			this->m_property.m_hpoints 
-				+= static_cast<Value>((double)this->m_property.m_hpoints / 20.0) + CommonBasicValues::hpointsInc;
+				+= static_cast<Value>((double)this->m_property.m_hpoints / 40.0) + CommonBasicValues::hpointsInc;
 		}
 		break;
 

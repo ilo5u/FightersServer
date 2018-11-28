@@ -25,7 +25,7 @@ public:
 	};
 
 public:
-	User(const SockaddrIn& clientAddr);
+	User(const Socket& client, const SockaddrIn& clientAddr);
 	~User();
 
 public:

@@ -6,8 +6,8 @@
 
 typedef Packet::Type    PacketType;
 
-User::User(const SockaddrIn& clientAddr) :
-	m_client(), m_clientAddr(clientAddr),
+User::User(const Socket& client, const SockaddrIn& clientAddr) :
+	m_client(client), m_clientAddr(clientAddr),
 	m_username(), m_pokemens()
 {
 }
@@ -22,9 +22,9 @@ static Strings SplitData(const char data[])
 	Strings ans;
 	for (int pos = 0; pos < std::strlen(data); ++pos)
 	{
-		if (pos == '\n')
+		if (data[pos] == '\n')
 		{
-			if (!per.empty())
+			if (per.size() > 0)
 				ans.push_back(per);
 			per.clear();
 		}
@@ -33,7 +33,9 @@ static Strings SplitData(const char data[])
 			per.push_back(data[pos]);
 		}
 	}
-	return std::move(ans);
+	if (per.size() > 0)
+		ans.push_back(per);
+	return ans;
 }
 
 // 仅由服务器线程调用

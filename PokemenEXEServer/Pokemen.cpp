@@ -25,12 +25,8 @@ namespace Pokemen
 			this->m_instance = new Guardian{ level };
 			break;
 
-		case PokemenType::ASSASSIN:
-			this->m_instance = new Assassin{ level };
-			break;
-
 		default:
-			throw std::exception("Create a player pokemen with a error type.");
+			this->m_instance = new Assassin{ level };
 			break;
 		}
 	}
@@ -298,6 +294,14 @@ namespace Pokemen
 			return this->m_instance->GetExp();
 	}
 
+	bool Pokemen::Upgrade(int exp)
+	{
+		if (this->m_instance == nullptr)
+			throw std::exception("CPokemenManager is not implement.");
+		else
+			return this->m_instance->Upgrade(exp);
+	}
+
 	bool Pokemen::SetPrimarySkill(int skill)
 	{
 		if (skill < 0 || skill > 2)
@@ -354,12 +358,30 @@ namespace Pokemen
 		return true;
 	}
 
+	void Pokemen::RenewProperty(const::Pokemen::Property& prop, int carrer)
+	{
+		if (this->m_instance == nullptr)
+			throw std::exception("CPokemenManager is not implement.");
+		else
+		{
+			this->m_instance->SetProperty(prop);
+		}
+	}
+
 	PokemenType Pokemen::GetType() const
 	{
 		if (this->m_instance == nullptr)
 			throw std::exception("CPokemenManager is not implement.");
 		else
 			return this->m_instance->GetType();
+	}
+
+	void Pokemen::SetMaxHpoints()
+	{
+		if (this->m_instance == nullptr)
+			throw std::exception("CPokemenManager is not implement.");
+		else
+			this->m_instance->SetMaxHpoints();
 	}
 
 	bool Pokemen::InState(BasePlayer::State nowState) const
@@ -387,12 +409,16 @@ namespace Pokemen
 		m_messages(), m_messagesMutex(), m_messagesAvailable(nullptr),
 		m_stateControl(nullptr), m_battleDriver(), m_isBattleRunnig(false)
 	{
-		m_messagesAvailable = CreateEvent(NULL, FALSE, NULL, NULL);
+		m_messagesAvailable = CreateSemaphore(NULL, NULL, 0xFF, NULL);
 		m_stateControl    = CreateEvent(NULL, FALSE, NULL, NULL);
 	}
 
 	BattleStage::~BattleStage()
 	{
+		m_isBattleRunnig = false;
+		if (m_battleDriver.joinable())
+			m_battleDriver.join();
+		CloseHandle(m_stateControl);
 		CloseHandle(m_messagesAvailable);
 	}
 
@@ -404,7 +430,6 @@ namespace Pokemen
 
 	void BattleStage::Start()
 	{
-		SetEvent(m_stateControl);
 		ResetEvent(m_messagesAvailable);
 		m_isBattleRunnig = true;
 
@@ -453,7 +478,7 @@ namespace Pokemen
 
 	BattleMessage BattleStage::ReadMessage()
 	{
-		WaitForSingleObject(m_messagesAvailable, 2000);
+		WaitForSingleObject(m_messagesAvailable, INFINITE);
 		BattleMessage message;
 		m_messagesMutex.lock();
 
@@ -470,81 +495,84 @@ namespace Pokemen
 
 	void BattleStage::_RunBattle_()
 	{
-		int break_of_first  = m_firstPlayer.GetInterval();
-		int break_of_second = m_secondPlayer.GetInterval();
+		m_firstPlayer.SetMaxHpoints();
+		m_secondPlayer.SetMaxHpoints();
+		int intervalOfFirst  = m_firstPlayer.GetInterval();
+		int intervalOfSecond = m_secondPlayer.GetInterval();
 
 		m_roundsCnt = 0;
-		String message;
 		while (!m_firstPlayer.InState(BasePlayer::State::DEAD)
 			&& !m_secondPlayer.InState(BasePlayer::State::DEAD)
 			&& m_isBattleRunnig)
 		{
+			WaitForSingleObject(m_stateControl, INFINITE);
+			SetEvent(m_stateControl);
+
 			++m_roundsCnt;
 
-			int min_span = std::min<int>(break_of_first, break_of_second);
+			int min_span = std::min<int>(intervalOfFirst, intervalOfSecond);
 			Sleep(min_span);
 
-			break_of_first  -= min_span;
-			break_of_second -= min_span;
+			intervalOfFirst  -= min_span;
+			intervalOfSecond -= min_span;
 
-			if (break_of_first == 0)
+			if (intervalOfFirst == 0)
 			{
-				message = "FIRST=" + m_firstPlayer.Attack(m_secondPlayer);
-				break_of_first = m_firstPlayer.GetInterval();
+				sprintf(m_battleMessage, 
+					"F\n%s\n",
+					m_firstPlayer.Attack(m_secondPlayer).c_str());
+				intervalOfFirst = m_firstPlayer.GetInterval();
 
-				m_messagesMutex.lock();
-
-				m_messages.push(message);
-				SetEvent(m_messagesAvailable);
-
-				m_messagesMutex.unlock();
+				if (std::strlen(m_battleMessage) > 3)
+				{
+					m_messagesMutex.lock();
+					m_messages.push({ BattleMessage::Type::DISPLAY, m_battleMessage });
+					ReleaseSemaphore(m_messagesAvailable, 1, NULL);
+					m_messagesMutex.unlock();
+				}
 			}
-			if (break_of_second == 0)
+			if (intervalOfSecond == 0)
 			{
-				message = "SECOND=" + m_secondPlayer.Attack(m_firstPlayer);
-				break_of_second = m_secondPlayer.GetInterval();
+				sprintf(m_battleMessage,
+					"S\n%s\n",
+					m_secondPlayer.Attack(m_firstPlayer).c_str());
+				intervalOfSecond = m_secondPlayer.GetInterval();
 
-				m_messagesMutex.lock();
-
-				m_messages.push(message);
-				SetEvent(m_messagesAvailable);
-
-				m_messagesMutex.unlock();
+				if (std::strlen(m_battleMessage) > 3)
+				{
+					m_messagesMutex.lock();
+					m_messages.push({ BattleMessage::Type::DISPLAY, m_battleMessage });
+					ReleaseSemaphore(m_messagesAvailable, 1, NULL);
+					m_messagesMutex.unlock();
+				}
 			}	// 将小精灵的所有属性值打包发送
-			sprintf(m_battleMessage, "RENEW:FIRST=%d,%d,%d,%d,%d,%d,%d,%d,%d\nSECOND=%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+			sprintf(m_battleMessage, "R\n%d,%d,%d,%d,%d,%d,%d,%d,%d\n%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
 				m_firstPlayer.GetHpoints(), m_firstPlayer.GetAttack(), m_firstPlayer.GetDefense(), m_firstPlayer.GetAgility(),
 				m_firstPlayer.GetInterval(), m_firstPlayer.GetCritical(), m_firstPlayer.GetHitratio(), m_firstPlayer.GetParryratio(), m_firstPlayer.GetAnger(),
 				m_secondPlayer.GetHpoints(), m_secondPlayer.GetAttack(), m_secondPlayer.GetDefense(), m_secondPlayer.GetAgility(),
 				m_secondPlayer.GetInterval(), m_secondPlayer.GetCritical(), m_secondPlayer.GetHitratio(), m_secondPlayer.GetParryratio(), m_secondPlayer.GetAnger());
 
 			m_messagesMutex.lock();
-
-			m_messages.push({ m_battleMessage });
-			SetEvent(m_messagesAvailable);
-
+			m_messages.push({ BattleMessage::Type::DISPLAY, m_battleMessage });
+			ReleaseSemaphore(m_messagesAvailable, 1, NULL);
 			m_messagesMutex.unlock();
-
-			WaitForSingleObject(m_stateControl, INFINITE);
 		}
 
-		message = "GAME END WITH ";
 		if (m_firstPlayer.InState(BasePlayer::State::DEAD))
-			message += "0";
+			sprintf(m_battleMessage, "F\n%d\n%d\n", m_firstPlayer.GetId(), m_roundsCnt);
 		else
-			message += "1";
+			sprintf(m_battleMessage, "S\n%d\n%d\n", m_firstPlayer.GetId(), m_roundsCnt);
 
 		m_messagesMutex.lock();
-
-		m_messages.push(message);
-		SetEvent(m_messagesAvailable);
-
+		m_messages.push({ BattleMessage::Type::RESULT, m_battleMessage });
+		ReleaseSemaphore(m_messagesAvailable, 1, NULL);
 		m_messagesMutex.unlock();
 
 		m_isBattleRunnig = false;
 	}
 
-	BattleMessage::BattleMessage(const String& message) :
-		options(message)
+	BattleMessage::BattleMessage(BattleMessage::Type type, const String& message) :
+		type(type), options(message)
 	{
 	}
 }

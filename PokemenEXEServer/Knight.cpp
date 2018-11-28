@@ -22,8 +22,7 @@ namespace Pokemen
 			0x0, 0x0, 0x0, 0x0
 		),
 		m_skill(Skill::Type::SUNDER_ARM),
-		m_career(Career::Type::Normal),
-		m_avatarRoundsCnt(0x0)
+		m_career(Career::Type::Normal)
 	{
 		this->m_property.m_interval
 			= IntervalValueCalculator(
@@ -56,8 +55,7 @@ namespace Pokemen
 	Knight::Knight(const Property& prop, Career::Type career) :
 		BasePlayer(prop),
 		m_skill(Skill::Type::SUNDER_ARM),
-		m_career(career),
-		m_avatarRoundsCnt(0x0)
+		m_career(career)
 	{
 	}
 
@@ -68,9 +66,11 @@ namespace Pokemen
 	{
 	}
 
-	Knight::Skill::Skill(Type primarySkill)
+	Knight::Skill::Skill(Type primarySkill) :
+		primarySkill(primarySkill),
+		sunderArmChance(+10), makeDizzyChance(+5),
+		sunderArmIndex(-10), avatarIndex(+100)
 	{
-		this->primarySkill = primarySkill;
 	}
 
 	Knight::Career::Type Knight::GetCareer() const
@@ -83,7 +83,7 @@ namespace Pokemen
 	/// </summary>
 	String Knight::Attack(BasePlayer& opponent)
 	{
-		ZeroMemory(m_battleMessage, sizeof(m_battleMessage));
+		m_battleMessage[0] = 0x0;
 		// 处理异常状态
 		if (this->InState(State::AVATAR))
 		{
@@ -112,12 +112,35 @@ namespace Pokemen
 				this->m_property.m_attack 
 					-= this->m_effects.sundered.attack;
 				this->SubState(State::SUNDERED);
-				sprintf(m_battleMessage + std::strlen(m_battleMessage),
-					"武器恢复。");
 			}
 			else
 			{
 				--this->m_stateRoundsCnt.sundered;
+			}
+		}
+
+		if (this->InState(State::SILENT))
+		{
+			if (this->m_stateRoundsCnt.silent == 1)
+			{
+				this->SubState(State::SILENT);
+			}
+			else
+			{
+				--this->m_stateRoundsCnt.silent;
+			}
+		}
+
+		if (this->InState(State::SLOWED))
+		{
+			if (this->m_stateRoundsCnt.slowed == 1)
+			{
+				this->m_property.m_interval -= this->m_effects.slowed.interval;
+				this->SubState(State::SLOWED);
+			}
+			else
+			{
+				--this->m_stateRoundsCnt.slowed;
 			}
 		}
 
@@ -126,19 +149,17 @@ namespace Pokemen
 			if (this->m_stateRoundsCnt.dizzying == 1)
 			{
 				this->SubState(State::DIZZYING);
-				sprintf(m_battleMessage + std::strlen(m_battleMessage),
-					"解除眩晕。");
 			}
 			else
 			{
 				--this->m_stateRoundsCnt.dizzying;
 			}
-			return false;
+			return m_battleMessage;
 		}
 
 		if (this->InState(State::DEAD))
 		{
-			return false;
+			return m_battleMessage;
 		}
 
 		if (_Hit_Target(this->m_property.m_hitratio, opponent.GetParryratio()))
@@ -165,10 +186,15 @@ namespace Pokemen
 				}
 			}
 
-			if (!this->InState(State::SILENT) && this->InState(State::ANGRIED))
+			if (this->InState(State::ANGRIED))
 			{	// 天神下凡
+				sprintf(m_battleMessage + std::strlen(m_battleMessage),
+					"天神下凡。");
 				this->m_anger = 0;
 				this->SubState(State::ANGRIED);
+
+				if (this->m_skill.avatarIndex != +100)
+					this->m_skill.avatarIndex = +100;
 
 				this->m_effects.avatar.attack
 					= ConvertValueByPercent(this->m_property.m_attack, this->m_skill.avatarIndex);
@@ -179,37 +205,37 @@ namespace Pokemen
 				this->m_effects.avatar.interval
 					= -this->m_skill.avatarIndex;
 
-				this->m_property.m_attack += this->m_effects.avatar.attack;
-				this->m_property.m_defense += this->m_effects.avatar.defense;
-				this->m_property.m_agility += this->m_effects.avatar.agility;
-				this->m_property.m_interval += this->m_effects.avatar.interval;
-
-				this->m_avatarRoundsCnt = BasicProperties::avatarRounds;
-				this->AddState(State::AVATAR);
-
 				if (this->m_career.type == Career::Type::Ares)
 				{
-					this->m_property.m_attack
+					this->m_effects.avatar.attack
 						+= ConvertValueByPercent(opponent.m_property.m_attack, Career::Ares::sunderArmIncIndex);
-					this->m_property.m_defense
-						= std::max<Value>(
+					this->m_effects.avatar.defense
+						+= std::max<Value>(
 							this->m_property.m_defense - 1,
 							ConvertValueByPercent(opponent.m_property.m_defense, Career::Ares::sunderArmIncIndex)
 							);
 				}
 				else if (this->m_career.type == Career::Type::Athena)
 				{
-					this->m_property.m_attack
-						= std::min<Value>(
+					this->m_effects.avatar.attack
+						+= std::min<Value>(
 							this->m_property.m_attack - 1,
 							opponent.m_property.m_attack
 							);
-					this->m_property.m_defense
-						= std::max<Value>(
+					this->m_effects.avatar.defense
+						+= std::max<Value>(
 							this->m_property.m_defense + 1,
 							ConvertValueByPercent(opponent.m_property.m_defense, Career::Athena::defenseIncIndex)
 							);
 				}
+
+				this->m_property.m_attack += this->m_effects.avatar.attack;
+				this->m_property.m_defense += this->m_effects.avatar.defense;
+				this->m_property.m_agility += this->m_effects.avatar.agility;
+				this->m_property.m_interval += this->m_effects.avatar.interval;
+
+				this->m_stateRoundsCnt.avatar = BasicProperties::avatarRounds;
+				this->AddState(State::AVATAR);
 			}
 			else if (!this->InState(State::SILENT))
 			{
@@ -217,23 +243,28 @@ namespace Pokemen
 				{
 				case Skill::Type::SUNDER_ARM:
 				{
-					if (_Hit_Target(this->m_skill.sunderArmChance, 0x0)
+					if (_Hit_Target(this->m_skill.sunderArmChance, 0)
 						&& !opponent.InState(State::SUNDERED))
 					{
 						opponent.m_effects.sundered.attack
 							= ConvertValueByPercent(opponent.m_property.m_attack, this->m_skill.sunderArmIndex);
 						opponent.m_property.m_attack
 							+= opponent.m_effects.sundered.attack;
+						opponent.SetSunderedRounds(CommonBasicValues::sunderedRounds);
 						opponent.AddState(State::SUNDERED);
+						sprintf(m_battleMessage + std::strlen(m_battleMessage),
+							"致残。");
 
 						this->m_skill.sunderArmChance
 							= std::min<Value>(40, this->m_skill.sunderArmChance + 1);
 					}
-					else if (_Hit_Target(this->m_skill.makeDizzyChance, 0x0)
+					else if (_Hit_Target(this->m_skill.makeDizzyChance, 5)
 						&& !opponent.InState(State::DIZZYING))
 					{
 						opponent.SetDizzyingRounds(CommonBasicValues::dizzyingRounds);
 						opponent.AddState(State::DIZZYING);
+						sprintf(m_battleMessage + std::strlen(m_battleMessage),
+							"践踏。");
 
 						this->m_skill.makeDizzyChance
 							= std::max<Value>(10, this->m_skill.makeDizzyChance - 2);
@@ -243,21 +274,26 @@ namespace Pokemen
 
 				case Skill::Type::MAKE_DIZZY:
 				{
-					if (_Hit_Target(this->m_skill.makeDizzyChance, 0x0))
+					if (_Hit_Target(this->m_skill.makeDizzyChance, 0))
 					{
 						opponent.SetDizzyingRounds(CommonBasicValues::dizzyingRounds);
 						opponent.AddState(State::DIZZYING);
+						sprintf(m_battleMessage + std::strlen(m_battleMessage),
+							"践踏。");
 
 						this->m_skill.sunderArmChance
 							= std::min<Value>(30, this->m_skill.sunderArmChance + 1);
 					}
-					else if (_Hit_Target(this->m_skill.sunderArmChance, 0x0))
+					else if (_Hit_Target(this->m_skill.sunderArmChance, 5))
 					{
 						opponent.m_effects.sundered.attack
 							= ConvertValueByPercent(opponent.m_property.m_attack, this->m_skill.sunderArmIndex);
 						opponent.m_property.m_attack
 							+= opponent.m_effects.sundered.attack;
+						opponent.SetSunderedRounds(CommonBasicValues::sunderedRounds);
 						opponent.AddState(State::SUNDERED);
+						sprintf(m_battleMessage + std::strlen(m_battleMessage),
+							"致残。");
 
 						this->m_skill.makeDizzyChance
 							= std::max<Value>(20, this->m_skill.makeDizzyChance - 1);
@@ -270,6 +306,9 @@ namespace Pokemen
 				}
 			}
 
+			sprintf(m_battleMessage + std::strlen(m_battleMessage),
+				"造成%d点伤害。",
+				AttackDamageCalculator(damage, opponent.GetDefense()));
 			Value rebounce = opponent.IsAttacked(AttackDamageCalculator(damage, opponent.GetDefense()));
 			if (rebounce > 0 
 				&& this->m_career.type != Career::Type::Ares)
@@ -287,13 +326,50 @@ namespace Pokemen
 				this->m_state = State::DEAD;
 			}
 		}
+		else
+		{
+			sprintf(m_battleMessage + std::strlen(m_battleMessage), "未命中。");
+		}
 
-		return { };
+		return m_battleMessage;
 	}
 
 	Value Knight::IsAttacked(Value damage)
 	{
-		return Value();
+		if (damage >= this->m_property.m_hpoints)
+		{
+			this->m_property.m_hpoints = 0;
+			this->m_state = State::DEAD;
+		}
+		else
+		{
+			this->m_property.m_hpoints -= damage;
+			this->m_anger = std::min<Value>(
+				CommonBasicValues::angerLimitation, 
+				this->m_anger + CommonBasicValues::angerInc + _Random(CommonBasicValues::angerInc)
+				);
+
+			if (this->m_anger == CommonBasicValues::angerLimitation)
+				this->AddState(State::ANGRIED);
+
+			if (this->InState(State::BLEED))
+			{
+				this->m_property.m_hpoints -=
+					BloodingDamageCalculator(CommonBasicValues::bleedDamage, this->m_property.m_defense);
+				sprintf(this->m_battleMessage + std::strlen(this->m_battleMessage),
+					"出血受到%d点伤害。",
+					BloodingDamageCalculator(CommonBasicValues::bleedDamage, this->m_property.m_defense));
+				if (this->m_property.m_hpoints <= 0)
+				{
+					this->m_property.m_hpoints = 0;
+					this->m_state = State::DEAD;
+				}
+
+				if (this->m_stateRoundsCnt.bleed == 1)
+					this->SubState(State::BLEED);
+			}
+		}
+		return 0;
 	}
 
 	bool Knight::SetPrimarySkill(Skill::Type primarySkill)

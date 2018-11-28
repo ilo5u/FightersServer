@@ -80,20 +80,23 @@ private:
 	volatile Boolean m_errorOccured;
 	volatile Boolean m_isServerOn;
 
+	std::map<Socket, Boolean> m_needRelease;
+	Mutex m_releaseLocker;
+
 private:
 	bool _InitDatabase_();
 	bool _InitNetwork_();
 
-	bool _AnalyzePacket_(SockaddrIn client, const Packet& recv);
+	bool _AnalyzePacket_(SockaddrIn client, const Packet& recv, LPPER_IO_OPERATION_DATA perIO);
 
-	void _DealWithLogin_(ULONG identity, const char data[]);
-	void _DealWithLogon_(ULONG identity, const char data[]);
-	void _DealWithLogout_(ULONG identity);
+	void _DealWithLogin_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
+	void _DealWithLogon_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
+	void _DealWithLogout_(ULONG identity, LPPER_IO_OPERATION_DATA perIO);
 
-	void _DealWithGetOnlineUsers_(ULONG identity, const char data[]);
-	void _DealWithPVEResult_(ULONG identity, const char data[]);
+	void _DealWithGetOnlineUsers_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
+	void _DealWithPVEResult_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
 
-	void _SendPacket_(HUser user, const Packet& send);
+	void _SendPacket_(HUser user, const Packet& send, LPPER_IO_OPERATION_DATA perIO);
 
 private:
 	void _WorkerThread_();

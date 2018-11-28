@@ -23,7 +23,7 @@ BOOL __stdcall InitServer()
 				throw std::exception("初始化服务器失败。\n");
 		}
 	}
-	catch (const std::exception& e)
+	catch (const std::exception&)
 	{
 		return FALSE;
 	}
@@ -37,7 +37,7 @@ BOOL __stdcall RunServer()
 		if (!hServer->Run())
 			throw std::exception("启动服务器失败。\n");
 	}
-	catch (const std::exception& e)
+	catch (const std::exception&)
 	{
 		return FALSE;
 	}
@@ -52,7 +52,7 @@ BOOL __stdcall IsServerOnRunning()
 String QueryServer(const char query[])
 {
 	String queryResult;
-	if (std::strcmp(query, "list users connected") == 0)
+	if (std::strcmp(query, "lc") == 0)
 	{
 		queryResult = 
 			hServer->GetClients();

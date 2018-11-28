@@ -15,12 +15,13 @@ namespace Pokemen
 	};
 
 	typedef int                 Id;
-	typedef int16_t             Value;
+	typedef int32_t             Value;
 	typedef std::string         String;
 	typedef std::vector<String> Strings;
 
 	struct Property
 	{
+		Property();
 		Property(int type, const char name[],
 			int hpoints, int attack, int defense, int agility,
 			int interval, int critical, int hitratio, int parryratio,
@@ -75,6 +76,7 @@ namespace Pokemen
 			REBOUND = 0x0200,
 			AVATAR = 0x0400,
 			INSPIRED = 0x0800,
+			ARMOR = 0x1000,
 
 			// 掩码（备用）
 			MASK = 0xFFFF
@@ -116,7 +118,7 @@ namespace Pokemen
 		Value GetExp() const;
 		Value GetLevel() const;
 
-		bool SetProperty(const Property& prop);
+		void SetProperty(const Property& prop);
 
 		Value GetAnger() const;
 
@@ -127,6 +129,7 @@ namespace Pokemen
 		bool SetSlowedRounds(Value rounds);
 		bool SetSilentRounds(Value rounds);
 		bool SetWeakenRounds(Value rounds);
+		void SetMaxHpoints();
 
 	protected:
 		struct SkillBase { };
@@ -161,9 +164,10 @@ namespace Pokemen
 
 			static const Value bleedRounds = 5;
 			static const Value weakenRounds = 3;
-			static const Value dizzyingRounds = 4;
-			static const Value sounderedRounds = 4;
-			static const Value silentRounds = 2;
+			static const Value dizzyingRounds = 2;
+			static const Value sunderedRounds = 3;
+			static const Value silentRounds = 4;
+			static const Value slowedRounds = 5;
 
 			static const Value angerLimitation = 100;
 			static const Value levelLimitation = 15;
@@ -189,6 +193,7 @@ namespace Pokemen
 			Effect weaken;
 			Effect avatar;
 			Effect inspired;
+			Effect armor;
 		};
 
 		struct StateRoundsCnt
@@ -201,6 +206,7 @@ namespace Pokemen
 			Value inspired;
 			Value weaken;
 			Value avatar;
+			Value armor;
 		};
 
 	protected:
@@ -210,6 +216,7 @@ namespace Pokemen
 		Value m_hpointsLimitation;
 		Effects m_effects;
 		StateRoundsCnt m_stateRoundsCnt;
+		char   m_battleMessage[BUFLEN];
 
 	protected:
 		virtual void _LevelUpPropertiesDistributor_() = 0;
@@ -230,12 +237,12 @@ namespace Pokemen
 			Type  primarySkill;
 			static const Type mainSkill = Type::REBIRTH;
 			// 技能释放概率值
-			Value ragedChance = 10;
-			Value selfHealingChance = 30;
+			Value ragedChance;
+			Value selfHealingChance;
 
 			// 技能增益
-			Value selfHealingIndex = 20;
-			Value weakenIndex = -50;
+			Value selfHealingIndex;
+			Value weakenIndex;
 
 			Skill(Type primarySkill);
 		};
@@ -248,14 +255,14 @@ namespace Pokemen
 				GreatMasterOfLight,
 				GreatMasterOfDark
 			};
-			Type type = Type::Normal;
+			Type type;
 
 			// 光明大法师
 			struct Lighter
 			{
 				const static Value healingIncIndex = +50;
 				const static Value selfHealingChanceIncIndex = +20;
-				const static Value damageDecIndex = -20;
+				const static Value damageDecIndex = -10;
 				const static Value hpointsIncIndex = +20;
 				const static Value weakenDecIndex = -50;
 			};
@@ -264,7 +271,7 @@ namespace Pokemen
 			struct Darker
 			{
 				const static Value selfHealingChanceDecIndex = -50;
-				const static Value defenseDecIndex = -50;
+				const static Value defenseDecIndex = -10;
 				const static Value damageIncIndex = +30;
 				const static Value angerExtra = CommonBasicValues::angerInc;
 				const static Value weakenIncIndex = +50;
@@ -293,14 +300,13 @@ namespace Pokemen
 		Skill  m_skill;
 		Career m_career;
 		Value  m_angriedCnt;
-		char   m_battleMessage[BUFLEN];
 
 	private:
 		struct BasicProperties
 		{
-			static const Value hitpoints = 480;
+			static const Value hitpoints = 960;
 			static const Value attack = 36;
-			static const Value defense = 38;
+			static const Value defense = 40;
 			static const Value agility = 24;
 		};
 
@@ -324,12 +330,12 @@ namespace Pokemen
 			static const Type mainSkill = Type::AVATAR;
 
 			// 技能释放概率值
-			Value sunderArmChance = 20;
-			Value makeDizzyChance = 40;
+			Value sunderArmChance;
+			Value makeDizzyChance;
 
 			// 技能增益
-			Value sunderArmIndex = -40;
-			Value avatarIndex = +200;
+			Value sunderArmIndex;
+			Value avatarIndex;
 
 			Skill(Type primarySkill);
 		};
@@ -342,23 +348,23 @@ namespace Pokemen
 				Ares,
 				Athena
 			};
-			Type type = Type::Normal;
+			Type type;
 
 			// 战神·阿瑞斯
 			struct Ares
 			{
 				const static Value sunderArmChanceIncIndex = +20;
-				const static Value sunderArmIncIndex = +50;
-				const static Value damageIncIndex = +50;
+				const static Value sunderArmIncIndex = +10;
+				const static Value damageIncIndex = +25;
 				const static Value intervalIncIndex = +200;
 			};
 
 			// 战争女神·雅典娜
 			struct Athena
 			{
-				const static Value makeDizzyChanceIncIndex = +50;
-				const static Value defenseIncIndex = +30;
-				const static Value damageDecIndex = -20;
+				const static Value makeDizzyChanceIncIndex = +20;
+				const static Value defenseIncIndex = +10;
+				const static Value damageDecIndex = -10;
 				const static Value intervalDecIndex = -100;
 			};
 
@@ -384,15 +390,13 @@ namespace Pokemen
 	private:
 		Skill  m_skill;
 		Career m_career;
-		Value  m_avatarRoundsCnt;
-		char   m_battleMessage[BUFLEN];
 
 	private:
 		struct BasicProperties
 		{
-			static const Value	hitpoints = 360;
-			static const Value	attack = 60;
-			static const Value	defense = 48;
+			static const Value	hitpoints = 640;
+			static const Value	attack = 50;
+			static const Value	defense = 36;
 			static const Value	agility = 36;
 			static const Value  avatarRounds = 3;
 		};
@@ -414,13 +418,13 @@ namespace Pokemen
 				ARMOR // 全副武装
 			};
 			Type  primarySkill;
-			Value sunkInSilenceChance = 10;
-			Value reboundDamageChance = 40;
+			Value sunkInSilenceChance;
+			Value reboundDamageChance;
 
-			Value reboundDamageIndex = +30;
+			Value reboundDamageIndex;
 
 			static const Type mainSkill = Type::ARMOR;
-			Value defenseIndex = +400;
+			Value defenseIndex;
 
 			Skill(Type primarySkill);
 		};
@@ -433,16 +437,16 @@ namespace Pokemen
 				Paladin,
 				Joker
 			};
-			Type type = Type::Normal;
+			Type type;
 
 			// 守护者·帕拉丁
 			struct Paladin
 			{
 				const static Value defenseIncIndex = +100;
-				const static Value damageDecIndex = -30;
+				const static Value damageDecIndex = -10;
 				const static Value sunkInSilenceChanceIncIndex = +50;
-				const static Value reboundDamageChanceDecIndex = -30;
-				const static Value reboundDamageIncIndex = +50;
+				const static Value reboundDamageChanceDecIndex = -20;
+				const static Value reboundDamageIncIndex = +100;
 				const static Value agilityDecIndex = -20;
 			};
 
@@ -452,7 +456,7 @@ namespace Pokemen
 				const static Value sunkInSilenceChanceIncIndex = +300;
 				const static Value silentRoundsIncIndex = +1;
 				const static Value reboundDamageChanceIncIndex = +50;
-				const static Value defenseDecIndex = -20;
+				const static Value defenseDecIndex = -10;
 			};
 
 			Career(Career::Type type);
@@ -481,10 +485,11 @@ namespace Pokemen
 	private:
 		struct BasicProperties
 		{
-			static const Value	hitpoints = 420;
+			static const Value	hitpoints = 800;
 			static const Value	attack = 36;
-			static const Value	defense = 60;
+			static const Value	defense = 70;
 			static const Value	agility = 24;
+			static const Value  armorRounds = 4;
 		};
 
 	private:
@@ -504,14 +509,14 @@ namespace Pokemen
 				INSPIRE // 精神鼓舞
 			};
 			Type  primarySkill;
-			Value tearingChance = 30;
-			Value slowChance    = 10;
+			Value tearingChance;
+			Value slowChance;
 
-			Value slowIndex = 200;
+			Value slowIndex;
 
 			static const Type mainSkill = Type::INSPIRE;
-			Value fastenIndex = 50;
-			Value stolenIndex = 50;
+			Value fastenIndex;
+			Value stolenIndex;
 
 			Skill(Type primarySkill);
 		};
@@ -524,7 +529,7 @@ namespace Pokemen
 				Yodian,
 				Michelle
 			};
-			Type type = Type::Normal;
+			Type type;
 
 			// 深渊猎手·尤迪安
 			struct Yodian
@@ -575,10 +580,11 @@ namespace Pokemen
 	private:
 		struct BasicProperties
 		{
-			static const Value hitpoints = 400;
-			static const Value attack = 48;
+			static const Value hitpoints = 560;
+			static const Value attack = 40;
 			static const Value defense = 24;
 			static const Value agility = 60;
+			static const Value inspiredRounds = 3;
 		};
 
 	private:

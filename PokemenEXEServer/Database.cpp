@@ -25,8 +25,14 @@ bool Database::Connect(const std::string& user, const std::string& password, con
 
 bool Database::Insert(const std::string& query)
 {
-	int iRetVal = mysql_query(&m_mysql, query.c_str());
-	if (!iRetVal)
+	if (!mysql_query(&m_mysql, query.c_str()))
+		return true;
+	return false;
+}
+
+bool Database::Update(const std::string& query)
+{
+	if (!mysql_query(&m_mysql, query.c_str()))
 		return true;
 	return false;
 }

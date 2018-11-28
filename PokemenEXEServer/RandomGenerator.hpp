@@ -34,14 +34,14 @@ namespace Pokemen
 	/// <summary>
 	/// 
 	/// </summary>
-	static bool _Hit_Target(int16_t positiveAffect, int16_t negativAffect)
+	static bool _Hit_Target(int32_t positiveAffect, int32_t negativAffect)
 	{
 		std::random_device rd;
 		g_Rand_Engine.seed(rd());
 
 		std::uniform_int_distribution<> u(0, 100);
 		if (u(g_Rand_Engine) 
-			< (int16_t)_Random(10) + (int16_t)(10.0 * std::sqrt(std::max<double>(double(positiveAffect - negativAffect), 0.0))))
+			< (int32_t)_Random(10) + (int32_t)(10.0 * std::sqrt(std::max<double>(double(positiveAffect - negativAffect / 4.0), 0.0))))
 			return true;
 		else
 			return false;
