@@ -95,6 +95,7 @@ private:
 
 	void _DealWithGetOnlineUsers_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
 	void _DealWithPVEResult_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
+	void _DealWithUpgradePokemen_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
 
 	void _SendPacket_(HUser user, const Packet& send, LPPER_IO_OPERATION_DATA perIO);
 

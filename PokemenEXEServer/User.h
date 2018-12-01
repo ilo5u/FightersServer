@@ -44,4 +44,6 @@ private:
 	/* 用户信息 */
 	String m_username;
 	Pokemens m_pokemens;
+	int m_rounds;
+	int m_wins;
 };

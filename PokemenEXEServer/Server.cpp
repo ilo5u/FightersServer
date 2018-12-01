@@ -201,6 +201,10 @@ bool Server::_AnalyzePacket_(SockaddrIn client, const Packet& recv, LPPER_IO_OPE
 		_DealWithPVEResult_(client.sin_addr.S_un.S_addr, recv.data, perIO);
 		break;
 
+	case PacketType::UPGRADE_POKEMEN:
+		_DealWithUpgradePokemen_(client.sin_addr.S_un.S_addr, recv.data, perIO);
+		break;
+
 	default:
 		break;
 	}
@@ -218,6 +222,12 @@ career,exp,level) values('%s',%d,'%s',\
 select identity,type,name,\
 hpoints,attack,defense,agility,interva,critical,hitratio,parryratio,\
 career,exp,level from pokemens where user='%s'"
+
+#define UPDATE_POKEMEN_QUERYSTRING "\
+update pokemens hpoints=%d,attack=%d,defense=%d,agility=%d,interva=%d,critical=%d,hitratio=%d,parryratio=%d,\
+career=%d,exp=%d,level=%d where identity=%d"
+
+#define POKEMEN_ALL_PROPERTIES "%d\n%d\n%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n"
 const static int initNumberOfPokemens = 3;
 void Server::_DealWithLogin_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO)
 {
@@ -229,7 +239,7 @@ void Server::_DealWithLogin_(ULONG identity, const char data[], LPPER_IO_OPERATI
 	try
 	{
 		sprintf(szQuery, 
-			"select numberOfPokemens from users where name='%s' and password='%s'",
+			"select numberOfPokemens,rounds,wins from users where name='%s' and password='%s'",
 			userInfos[0].c_str(), userInfos[1].c_str());
 		queryResult = m_hDatabase->Select(szQuery, 1);
 
@@ -259,6 +269,8 @@ void Server::_DealWithLogin_(ULONG identity, const char data[], LPPER_IO_OPERATI
 				user->m_username = userInfos[0];
 				Strings queryElems = SplitData(queryResult[0].c_str());
 				int numberOfPokemens = std::atoi(queryElems[0].c_str());
+				user->m_rounds = std::atoi(queryElems[1].c_str());
+				user->m_wins = std::atoi(queryElems[2].c_str());
 				if (numberOfPokemens == 0)
 				{
 					for (int i = 0; i < initNumberOfPokemens; ++i)
@@ -429,6 +441,141 @@ void Server::_DealWithGetOnlineUsers_(ULONG identity, const char data[], LPPER_I
 
 void Server::_DealWithPVEResult_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO)
 {
+	Packet sendPacket;
+	Strings infos = SplitData(data);
+	try
+	{
+		this->m_userLocker.lock();
+		HUser user = this->m_users[identity];
+		this->m_userLocker.unlock();
+		if (user != nullptr)
+		{
+			++user->m_rounds;
+			if (infos[0].compare("F") == 0)
+				++user->m_wins;
+
+			fprintf(stdout,
+				"比赛结果：%s", data);
+
+			Strings queryResult;
+			char    szQuery[BUFLEN];
+			sprintf(szQuery,
+				"update users set rounds=%d,wins=%d where name='%s'", 
+				user->m_rounds, user->m_wins, user->m_username.c_str());
+			this->m_hDatabase->Update(szQuery);
+
+			Pokemen::Property prop;
+			char name[BUFSIZ];
+			int careerType;
+			sscanf(data, POKEMEN_ALL_PROPERTIES,
+				&prop.m_id, (int*)&prop.m_type, name,
+				&prop.m_hpoints, &prop.m_attack, &prop.m_defense, &prop.m_agility,
+				&prop.m_interval, &prop.m_critical, &prop.m_hitratio, &prop.m_parryratio,
+				&careerType, &prop.m_exp, &prop.m_level
+			);
+			prop.m_name = name;
+			Pokemens::iterator pokemen = std::find_if(user->m_pokemens.begin(),
+				user->m_pokemens.end(),
+				[&prop](const Pokemen::Pokemen& temp) {
+				return temp.GetId() == prop.m_id;
+			});
+			if (pokemen != user->m_pokemens.end() && careerType < 3)
+			{
+				pokemen->RenewProperty(prop, careerType);
+				sprintf(szQuery,
+					UPDATE_POKEMEN_QUERYSTRING,
+					prop.m_hpoints, prop.m_attack, prop.m_defense, prop.m_agility,
+					prop.m_interval, prop.m_critical, prop.m_hitratio, prop.m_parryratio,
+					careerType, prop.m_exp, prop.m_level,
+					prop.m_id
+				);
+				this->m_hDatabase->Update(szQuery);
+
+				sendPacket.type = PacketType::UPDATE_POKEMENS;
+				sprintf(sendPacket.data,
+					POKEMEN_ALL_PROPERTIES,
+					pokemen->GetId(), (int)pokemen->GetType(), pokemen->GetName().c_str(),
+					pokemen->GetHpoints(), pokemen->GetAttack(), pokemen->GetDefense(), pokemen->GetAgility(),
+					pokemen->GetInterval(), pokemen->GetCritical(), pokemen->GetHitratio(), pokemen->GetParryratio(),
+					pokemen->GetCareer(), pokemen->GetExp(), pokemen->GetLevel()
+				);
+				_SendPacket_(user, sendPacket, perIO);
+			}
+
+			DWORD recvBytes;
+			DWORD flags;
+			// 接收数据，放到PerIoData中
+			// 而PerIoData又通过工作线程中的ServerWorkerThread函数取出
+			if (WSARecv(user->m_client, &(perIO->dataBuf), 1, &recvBytes, &flags,
+				&(perIO->overlapped), NULL) == SOCKET_ERROR)
+			{
+				if (WSAGetLastError() != ERROR_IO_PENDING)
+				{
+					this->m_releaseLocker.lock();
+					if (this->m_needRelease[user->m_client])
+					{
+						closesocket(user->m_client);
+						this->m_needRelease[user->m_client] = false;
+						this->m_needRelease.erase(user->m_client);
+						delete perIO;
+					}
+					this->m_releaseLocker.unlock();
+				}
+			}
+		}
+	}
+	catch (const std::exception&)
+	{
+	}
+}
+
+void Server::_DealWithUpgradePokemen_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO)
+{
+	Strings queryResult;
+	char    szQuery[BUFLEN];
+	Packet  sendPacket;
+	try
+	{ 
+		this->m_userLocker.lock();
+		HUser user = this->m_users[identity];
+		this->m_userLocker.unlock();
+		if (user != nullptr)
+		{
+			int pokemenId = 0;
+			int careerType = 0;
+			sscanf(data, "%d\n%d\n", &pokemenId, &careerType);
+			Pokemens::iterator pokemen = std::find_if(user->m_pokemens.begin(),
+				user->m_pokemens.end(),
+				[&pokemenId](const Pokemen::Pokemen& temp){
+					return temp.GetId() == pokemenId;
+			});
+			if (pokemen != user->m_pokemens.end() && careerType < 3)
+			{
+				pokemen->Promote(careerType);
+				sprintf(szQuery,
+					UPDATE_POKEMEN_QUERYSTRING,
+					pokemen->GetHpoints(), pokemen->GetAttack(), pokemen->GetDefense(), pokemen->GetAgility(),
+					pokemen->GetInterval(), pokemen->GetCritical(), pokemen->GetHitratio(), pokemen->GetParryratio(),
+					pokemen->GetCareer(), pokemen->GetExp(), pokemen->GetLevel(),
+					pokemenId
+				);
+				this->m_hDatabase->Update(szQuery);
+
+				sendPacket.type = PacketType::UPDATE_POKEMENS;
+				sprintf(sendPacket.data,
+					POKEMEN_ALL_PROPERTIES,
+					pokemen->GetId(), (int)pokemen->GetType(), pokemen->GetName().c_str(),
+					pokemen->GetHpoints(), pokemen->GetAttack(), pokemen->GetDefense(), pokemen->GetAgility(),
+					pokemen->GetInterval(), pokemen->GetCritical(), pokemen->GetHitratio(), pokemen->GetParryratio(),
+					pokemen->GetCareer(), pokemen->GetExp(), pokemen->GetLevel()
+				);
+				_SendPacket_(user, sendPacket, perIO);
+			}
+		}
+	}
+	catch (const std::exception&)
+	{
+	}
 }
 
 /* 投递出境数据包 */
