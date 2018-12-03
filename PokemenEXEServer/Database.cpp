@@ -2,37 +2,46 @@
 #include "Database.h"
 
 Database::Database() :
-    m_mysql()
+    m_mysql(), m_locker()
 {
-    mysql_init(&m_mysql);
+	mysql_init(&m_mysql);
 }
 
 Database::~Database()
 {
-    mysql_close(&m_mysql);
+	Disconnect();
 }
 
 bool Database::Connect(const std::string& user, const std::string& password, const std::string& database)
 {
     if (mysql_real_connect(&m_mysql, "localhost",
-                           user.c_str(), password.c_str(), database.c_str(),
-                           0, NULL, 0))
-    {
+		user.c_str(), password.c_str(), database.c_str(),
+		0, NULL, 0))
         return true;
-    }
     return false;
+}
+
+void Database::Disconnect()
+{
+	mysql_close(&m_mysql);
 }
 
 bool Database::Insert(const std::string& query)
 {
-	if (!mysql_query(&m_mysql, query.c_str()))
+	m_locker.lock();
+	int ret = mysql_real_query(&m_mysql, query.c_str(), query.size());
+	m_locker.unlock();
+	if (!ret)
 		return true;
 	return false;
 }
 
 bool Database::Update(const std::string& query)
 {
-	if (!mysql_query(&m_mysql, query.c_str()))
+	m_locker.lock();
+	int ret = mysql_real_query(&m_mysql, query.c_str(), query.size());
+	m_locker.unlock();
+	if (!ret)
 		return true;
 	return false;
 }
@@ -44,7 +53,8 @@ std::vector<std::string> Database::Select(const std::string& query, int valueCnt
 
     std::vector<std::string> queryResult;
 	std::string rowResult;
-    int iRetVal = mysql_query(&m_mysql, query.c_str());
+	m_locker.lock();
+    int iRetVal = mysql_real_query(&m_mysql, query.c_str(), query.size());
     if (!iRetVal)
     {
 		sqlResult = mysql_store_result(&m_mysql);
@@ -63,7 +73,7 @@ std::vector<std::string> Database::Select(const std::string& query, int valueCnt
     if (sqlResult != NULL)
         mysql_free_result(sqlResult);
     sqlResult = NULL;
-
+	m_locker.unlock();
     return queryResult;
 }
 

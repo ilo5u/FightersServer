@@ -158,7 +158,7 @@ namespace Pokemen
 			static const Value angerInc = 10;
 			static const Value bleedDamage = 20;
 
-			static const Value exp = 1000;
+			static const Value exp = 100;
 			static const Value hpointsInc = 100;
 			static const Value levelupPropertiesInc = 21;
 

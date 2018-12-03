@@ -41,3 +41,27 @@ struct Packet
 	Packet& operator=(const Packet& other);
 	Packet& operator=(Packet&& other);
 };
+
+typedef enum class _OPERATION_TYPE
+{
+	SEND_POSTED,
+	RECV_POSTED,
+	NULL_POSTED
+} OPERATION_TYPE;
+
+constexpr int DATA_BUFSIZE = 4096;
+typedef struct
+{
+	OVERLAPPED overlapped; // 重叠结构
+	WSABUF dataBuf; // 缓冲区对象
+	CHAR buffer[DATA_BUFSIZE]; // 缓冲区数组
+	OPERATION_TYPE opType;
+	DWORD sendBytes;
+	DWORD totalBytes;
+} PER_IO_OPERATION_DATA, *LPPER_IO_OPERATION_DATA;
+
+typedef struct
+{
+	SOCKET client;
+	SOCKADDR_IN addr;
+} PER_HANDLE_DATA, *LPPER_HANDLE_DATA;

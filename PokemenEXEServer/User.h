@@ -40,6 +40,7 @@ private:
 	/* 连接信息 */
 	const Socket m_client;
 	const SockaddrIn m_clientAddr;
+	LPPER_IO_OPERATION_DATA m_io;
 
 	/* 用户信息 */
 	String m_username;

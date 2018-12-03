@@ -20,30 +20,6 @@ typedef typename std::list<HUser> UserList;
 typedef User::BattleType   BattleType;
 typedef std::map<ULONG, HUser> Users;
 
-typedef enum class _OPERATION_TYPE
-{
-	SEND_POSTED,
-	RECV_POSTED,
-	NULL_POSTED
-} OPERATION_TYPE;
-
-constexpr int DATA_BUFSIZE = 4096;
-typedef struct
-{
-	OVERLAPPED overlapped; // 重叠结构
-	WSABUF dataBuf; // 缓冲区对象
-	CHAR buffer[DATA_BUFSIZE]; // 缓冲区数组
-	OPERATION_TYPE opType;
-	DWORD sendBytes;
-	DWORD totalBytes;
-} PER_IO_OPERATION_DATA, *LPPER_IO_OPERATION_DATA;
-
-typedef struct
-{
-	SOCKET client;
-	SOCKADDR_IN addr;
-} PER_HANDLE_DATA, *LPPER_HANDLE_DATA;
-
 class Server
 {
 public:
@@ -75,8 +51,9 @@ private:
 
 	/* 重叠IO模块 */
 	Handle m_completionPort;
-	Thread m_acceptDriver;
+	Thread m_accepter;
 	Threads m_workers;
+	Thread m_beater;
 	volatile Boolean m_errorOccured;
 	volatile Boolean m_isServerOn;
 
@@ -102,5 +79,6 @@ private:
 private:
 	void _WorkerThread_();
 	void _ServerAcceptThread_();
+	void _BeatThread_();
 
 };

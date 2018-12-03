@@ -37,12 +37,34 @@ static Strings SplitData(const char data[])
 	return ans;
 }
 
+static Strings SplitData(const char data[], char ch)
+{
+	String per;
+	Strings ans;
+	for (int pos = 0; pos < std::strlen(data); ++pos)
+	{
+		if (data[pos] == ch)
+		{
+			if (per.size() > 0)
+				ans.push_back(per);
+			per.clear();
+		}
+		else
+		{
+			per.push_back(data[pos]);
+		}
+	}
+	if (per.size() > 0)
+		ans.push_back(per);
+	return ans;
+}
+
 Server::Server() :
 	m_hDatabase{ new Database{} },
 	m_serverSocket(), m_serverAddr(),
 	m_users(), m_userLocker(),
 	m_completionPort(nullptr), 
-	m_acceptDriver(), m_workers(), 
+	m_accepter(), m_workers(), m_beater(),
 	m_errorOccured(false),
 	m_isServerOn(false)
 {
@@ -51,8 +73,11 @@ Server::Server() :
 Server::~Server()
 {
 	this->m_isServerOn = false;
-	if (this->m_acceptDriver.joinable())
-		this->m_acceptDriver.join();
+	if (this->m_beater.joinable())
+		this->m_beater.join();
+
+	if (this->m_accepter.joinable())
+		this->m_accepter.join();
 
 	delete this->m_hDatabase;
 }
@@ -92,7 +117,7 @@ bool Server::Run()
 		}
 
 		m_serverAddr.sin_family = AF_INET;
-		m_serverAddr.sin_addr.S_un.S_addr = inet_addr("10.201.6.248");
+		m_serverAddr.sin_addr.S_un.S_addr = INADDR_ANY;
 		m_serverAddr.sin_port = htons(PORT);
 
 		if (bind(m_serverSocket, (LPSOCKADDR)&m_serverAddr,
@@ -120,8 +145,11 @@ bool Server::Run()
 				std::move(Thread{ std::bind(&Server::_WorkerThread_, this) })
 			);
 		}
-		this->m_acceptDriver
+		this->m_accepter
 			= std::move(Thread{ std::bind(&Server::_ServerAcceptThread_, this) });
+
+		//this->m_beater
+		//	= std::move(Thread{ std::bind(&Server::_BeatThread_, this) });
 	}
 	catch (std::exception&)
 	{
@@ -193,7 +221,6 @@ bool Server::_AnalyzePacket_(SockaddrIn client, const Packet& recv, LPPER_IO_OPE
 		break;
 
 	case PacketType::LOGOUT:
-		fprintf(stdout, "用户下线。\n");
 		_DealWithLogout_(client.sin_addr.S_un.S_addr, perIO);
 		break;
 
@@ -224,7 +251,7 @@ hpoints,attack,defense,agility,interva,critical,hitratio,parryratio,\
 career,exp,level from pokemens where user='%s'"
 
 #define UPDATE_POKEMEN_QUERYSTRING "\
-update pokemens hpoints=%d,attack=%d,defense=%d,agility=%d,interva=%d,critical=%d,hitratio=%d,parryratio=%d,\
+update pokemens set hpoints=%d,attack=%d,defense=%d,agility=%d,interva=%d,critical=%d,hitratio=%d,parryratio=%d,\
 career=%d,exp=%d,level=%d where identity=%d"
 
 #define POKEMEN_ALL_PROPERTIES "%d\n%d\n%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n"
@@ -241,7 +268,7 @@ void Server::_DealWithLogin_(ULONG identity, const char data[], LPPER_IO_OPERATI
 		sprintf(szQuery, 
 			"select numberOfPokemens,rounds,wins from users where name='%s' and password='%s'",
 			userInfos[0].c_str(), userInfos[1].c_str());
-		queryResult = m_hDatabase->Select(szQuery, 1);
+		queryResult = m_hDatabase->Select(szQuery, 3);
 
 		this->m_userLocker.lock();
 		HUser user = this->m_users[identity];
@@ -252,13 +279,15 @@ void Server::_DealWithLogin_(ULONG identity, const char data[], LPPER_IO_OPERATI
 				"收到登录请求：用户名=%s 密码=%s\n",
 				userInfos[0].c_str(), userInfos[1].c_str());
 			// 反馈登陆信息
+			Strings queryElems;
 			if (!user->m_username.empty() || queryResult.empty())
 				sendPacket.type = PacketType::LOGIN_FAILED;
 			else
 			{
+				queryElems = SplitData(queryResult[0].c_str());
 				sendPacket.type = PacketType::LOGIN_SUCCESS;
 				user->SetUsername(userInfos[0]);
-				sprintf(sendPacket.data, "%s", queryResult[0].c_str());
+				sprintf(sendPacket.data, "%s", queryElems[0].c_str());
 				fprintf(stdout, "登陆成功\n");
 			}
 			_SendPacket_(user, sendPacket, perIO);
@@ -267,7 +296,6 @@ void Server::_DealWithLogin_(ULONG identity, const char data[], LPPER_IO_OPERATI
 			if (sendPacket.type == PacketType::LOGIN_SUCCESS)
 			{
 				user->m_username = userInfos[0];
-				Strings queryElems = SplitData(queryResult[0].c_str());
 				int numberOfPokemens = std::atoi(queryElems[0].c_str());
 				user->m_rounds = std::atoi(queryElems[1].c_str());
 				user->m_wins = std::atoi(queryElems[2].c_str());
@@ -342,7 +370,7 @@ void Server::_DealWithLogon_(ULONG identity, const char data[], LPPER_IO_OPERATI
 		if (user != nullptr)
 		{
 			sprintf(szQuery,
-				"insert into users values('%s','%s',0)",
+				"insert into users values('%s','%s',0, 0, 0)",
 				userInfos[0].c_str(), userInfos[1].c_str()
 			);
 
@@ -374,12 +402,12 @@ void Server::_DealWithLogout_(ULONG identity, LPPER_IO_OPERATION_DATA perIO)
 		if (user != nullptr)
 		{
 			sendPacket.type = PacketType::UPDATE_ONLINE_USERS;
-			sprintf(sendPacket.data, "%s\nOFF\n", user->GetUsername().c_str());
+			sprintf(sendPacket.data, "%s\nOFF\n", user->m_username.c_str());
 			for (auto& other : this->m_users)
 			{
 				if (other.first != identity)
 				{
-					_SendPacket_(other.second, sendPacket, perIO);
+					_SendPacket_(other.second, sendPacket, other.second->m_io);
 				}
 			}
 			closesocket(user->m_client);
@@ -464,29 +492,26 @@ void Server::_DealWithPVEResult_(ULONG identity, const char data[], LPPER_IO_OPE
 				user->m_rounds, user->m_wins, user->m_username.c_str());
 			this->m_hDatabase->Update(szQuery);
 
-			Pokemen::Property prop;
-			char name[BUFSIZ];
-			int careerType;
-			sscanf(data, POKEMEN_ALL_PROPERTIES,
-				&prop.m_id, (int*)&prop.m_type, name,
-				&prop.m_hpoints, &prop.m_attack, &prop.m_defense, &prop.m_agility,
-				&prop.m_interval, &prop.m_critical, &prop.m_hitratio, &prop.m_parryratio,
-				&careerType, &prop.m_exp, &prop.m_level
-			);
-			prop.m_name = name;
+			Pokemen::Property prop{
+				std::atoi(infos[4].c_str()), infos[5].c_str(),
+				std::atoi(infos[6].c_str()), std::atoi(infos[7].c_str()), std::atoi(infos[8].c_str()), std::atoi(infos[9].c_str()),
+				std::atoi(infos[10].c_str()), std::atoi(infos[11].c_str()), std::atoi(infos[12].c_str()), std::atoi(infos[13].c_str()),
+				std::atoi(infos[15].c_str()), std::atoi(infos[16].c_str()),
+				std::atoi(infos[3].c_str())
+			};
 			Pokemens::iterator pokemen = std::find_if(user->m_pokemens.begin(),
 				user->m_pokemens.end(),
 				[&prop](const Pokemen::Pokemen& temp) {
 				return temp.GetId() == prop.m_id;
 			});
-			if (pokemen != user->m_pokemens.end() && careerType < 3)
+			if (pokemen != user->m_pokemens.end())
 			{
-				pokemen->RenewProperty(prop, careerType);
+				pokemen->RenewProperty(prop, std::atoi(infos[14].c_str()));
 				sprintf(szQuery,
 					UPDATE_POKEMEN_QUERYSTRING,
 					prop.m_hpoints, prop.m_attack, prop.m_defense, prop.m_agility,
 					prop.m_interval, prop.m_critical, prop.m_hitratio, prop.m_parryratio,
-					careerType, prop.m_exp, prop.m_level,
+					std::atoi(infos[14].c_str()), prop.m_exp, prop.m_level,
 					prop.m_id
 				);
 				this->m_hDatabase->Update(szQuery);
@@ -500,27 +525,6 @@ void Server::_DealWithPVEResult_(ULONG identity, const char data[], LPPER_IO_OPE
 					pokemen->GetCareer(), pokemen->GetExp(), pokemen->GetLevel()
 				);
 				_SendPacket_(user, sendPacket, perIO);
-			}
-
-			DWORD recvBytes;
-			DWORD flags;
-			// 接收数据，放到PerIoData中
-			// 而PerIoData又通过工作线程中的ServerWorkerThread函数取出
-			if (WSARecv(user->m_client, &(perIO->dataBuf), 1, &recvBytes, &flags,
-				&(perIO->overlapped), NULL) == SOCKET_ERROR)
-			{
-				if (WSAGetLastError() != ERROR_IO_PENDING)
-				{
-					this->m_releaseLocker.lock();
-					if (this->m_needRelease[user->m_client])
-					{
-						closesocket(user->m_client);
-						this->m_needRelease[user->m_client] = false;
-						this->m_needRelease.erase(user->m_client);
-						delete perIO;
-					}
-					this->m_releaseLocker.unlock();
-				}
 			}
 		}
 	}
@@ -616,6 +620,7 @@ void Server::_WorkerThread_()
 	DWORD sendBytes;
 
 	Packet recvPacket;
+	Packet sendPacket;
 
 	while (!this->m_errorOccured && this->m_isServerOn)
 	{
@@ -626,21 +631,34 @@ void Server::_WorkerThread_()
 		{
 			if (perClient != nullptr)
 			{
+				this->m_userLocker.lock();
 				this->m_releaseLocker.lock();
 				if (this->m_needRelease[perClient->client])
 				{
+					HUser user = this->m_users[perClient->addr.sin_addr.S_un.S_addr];
+					if (user != nullptr)
+					{
+						sendPacket.type = PacketType::UPDATE_ONLINE_USERS;
+						sprintf(sendPacket.data, "%s\nOFF\n", user->GetUsername().c_str());
+						for (auto& other : this->m_users)
+						{
+							if (other.first != perClient->addr.sin_addr.S_un.S_addr)
+							{
+								_SendPacket_(other.second, sendPacket, other.second->m_io);
+							}
+						}
+					}
 					/* 释放连接 */
-					this->m_userLocker.lock();
 					this->m_users.erase(perClient->addr.sin_addr.S_un.S_addr);
-					this->m_userLocker.unlock();
 
 					closesocket(perClient->client);
 					this->m_needRelease[perClient->client] = false;
 					this->m_needRelease.erase(perClient->client);
 					delete perClient;
 					delete perIO;
-					this->m_releaseLocker.unlock();
 				}
+				this->m_releaseLocker.unlock();
+				this->m_userLocker.unlock();
 				continue;
 			}
 		}
@@ -651,9 +669,26 @@ void Server::_WorkerThread_()
 				&& (perIO->opType == OPERATION_TYPE::RECV_POSTED
 					|| perIO->opType == OPERATION_TYPE::SEND_POSTED))
 			{
+				this->m_userLocker.lock();
 				this->m_releaseLocker.lock();
 				if (this->m_needRelease[perClient->client])
 				{
+					HUser user = this->m_users[perClient->addr.sin_addr.S_un.S_addr];
+					if (user != nullptr)
+					{
+						sendPacket.type = PacketType::UPDATE_ONLINE_USERS;
+						sprintf(sendPacket.data, "%s\nOFF\n", user->GetUsername().c_str());
+						for (auto& other : this->m_users)
+						{
+							if (other.first != perClient->addr.sin_addr.S_un.S_addr)
+							{
+								_SendPacket_(other.second, sendPacket, other.second->m_io);
+							}
+						}
+					}
+					/* 释放连接 */
+					this->m_users.erase(perClient->addr.sin_addr.S_un.S_addr);
+
 					closesocket(perClient->client);
 					this->m_needRelease[perClient->client] = false;
 					this->m_needRelease.erase(perClient->client);
@@ -661,6 +696,7 @@ void Server::_WorkerThread_()
 					delete perIO;
 				}
 				this->m_releaseLocker.unlock();
+				this->m_userLocker.unlock();
 				continue;
 			}
 			else if (perIO != nullptr && perClient != nullptr)
@@ -692,9 +728,26 @@ void Server::_WorkerThread_()
 							if (WSAGetLastError() != ERROR_IO_PENDING
 								&& perClient != nullptr)
 							{
+								this->m_userLocker.lock();
 								this->m_releaseLocker.lock();
 								if (this->m_needRelease[perClient->client])
 								{
+									HUser user = this->m_users[perClient->addr.sin_addr.S_un.S_addr];
+									if (user != nullptr)
+									{
+										sendPacket.type = PacketType::UPDATE_ONLINE_USERS;
+										sprintf(sendPacket.data, "%s\nOFF\n", user->GetUsername().c_str());
+										for (auto& other : this->m_users)
+										{
+											if (other.first != perClient->addr.sin_addr.S_un.S_addr)
+											{
+												_SendPacket_(other.second, sendPacket, other.second->m_io);
+											}
+										}
+									}
+									/* 释放连接 */
+									this->m_users.erase(perClient->addr.sin_addr.S_un.S_addr);
+
 									closesocket(perClient->client);
 									this->m_needRelease[perClient->client] = false;
 									this->m_needRelease.erase(perClient->client);
@@ -702,6 +755,7 @@ void Server::_WorkerThread_()
 									delete perIO;
 								}
 								this->m_releaseLocker.unlock();
+								this->m_userLocker.unlock();
 								continue;
 							}
 						}
@@ -723,9 +777,26 @@ void Server::_WorkerThread_()
 							if (WSAGetLastError() != ERROR_IO_PENDING
 								&& perClient != nullptr)
 							{
+								this->m_userLocker.lock();
 								this->m_releaseLocker.lock();
 								if (this->m_needRelease[perClient->client])
 								{
+									HUser user = this->m_users[perClient->addr.sin_addr.S_un.S_addr];
+									if (user != nullptr)
+									{
+										sendPacket.type = PacketType::UPDATE_ONLINE_USERS;
+										sprintf(sendPacket.data, "%s\nOFF\n", user->GetUsername().c_str());
+										for (auto& other : this->m_users)
+										{
+											if (other.first != perClient->addr.sin_addr.S_un.S_addr)
+											{
+												_SendPacket_(other.second, sendPacket, other.second->m_io);
+											}
+										}
+									}
+									/* 释放连接 */
+									this->m_users.erase(perClient->addr.sin_addr.S_un.S_addr);
+
 									closesocket(perClient->client);
 									this->m_needRelease[perClient->client] = false;
 									this->m_needRelease.erase(perClient->client);
@@ -733,6 +804,7 @@ void Server::_WorkerThread_()
 									delete perIO;
 								}
 								this->m_releaseLocker.unlock();
+								this->m_userLocker.unlock();
 								continue;
 							}
 						}
@@ -790,9 +862,6 @@ void Server::_ServerAcceptThread_()
 			this->m_releaseLocker.unlock();
 
 			// 分配并设置Socket句柄结构体
-			//if ((perClient = (LPPER_HANDLE_DATA)GlobalAlloc(
-			//	GPTR, sizeof(PER_HANDLE_DATA)
-			//)) == NULL)
 			if ((perClient = new PER_HANDLE_DATA{ }) == nullptr)
 			{
 				throw std::exception("内存不足。\n");
@@ -849,5 +918,51 @@ void Server::_ServerAcceptThread_()
 		});
 		this->m_users.clear();
 		this->m_isServerOn = false;
+	}
+}
+
+void Server::_BeatThread_()
+{
+	Packet sendPacket;
+	sendPacket.type = PacketType::INVALID;
+	while (!this->m_errorOccured && this->m_isServerOn)
+	{
+		Sleep(3000);
+
+		this->m_userLocker.lock();
+		/* 设置发送对象 */
+		std::for_each(m_users.begin(), m_users.end(),
+			[&sendPacket, this](const std::pair<ULONG, HUser>& user) {
+			DWORD sendBytes;
+			LPPER_IO_OPERATION_DATA perIO = user.second->m_io;
+			ZeroMemory(&(perIO->overlapped), sizeof(OVERLAPPED));
+			std::memcpy((LPCH)perIO->buffer, (LPCH)&sendPacket, sizeof(Packet));
+			perIO->dataBuf.buf = perIO->buffer;
+			perIO->dataBuf.len = sizeof(Packet);
+			perIO->opType = OPERATION_TYPE::SEND_POSTED;
+			perIO->sendBytes = 0;
+			perIO->totalBytes = sizeof(Packet);
+
+			if (WSASend(user.second->m_client, &(perIO->dataBuf), 1, &sendBytes, 0,
+				&(perIO->overlapped), NULL) == SOCKET_ERROR)
+			{
+				if (WSAGetLastError() != ERROR_IO_PENDING)
+				{
+					fprintf(stdout, "IP=%s掉线\n", inet_ntoa(user.second->m_clientAddr.sin_addr));
+					this->m_releaseLocker.lock();
+					if (this->m_needRelease[user.second->m_client])
+					{
+						/* 释放连接 */
+						this->m_users.erase(user.second->m_clientAddr.sin_addr.S_un.S_addr);
+
+						closesocket(user.second->m_client);
+						this->m_needRelease[user.second->m_client] = false;
+						this->m_needRelease.erase(user.second->m_client);
+					}
+					this->m_releaseLocker.unlock();
+				}
+			}
+		});
+		this->m_userLocker.unlock();
 	}
 }

@@ -8,12 +8,13 @@ typedef Packet::Type    PacketType;
 
 User::User(const Socket& client, const SockaddrIn& clientAddr) :
 	m_client(client), m_clientAddr(clientAddr),
-	m_username(), m_pokemens()
+	m_username(), m_pokemens(), m_io(new PER_IO_OPERATION_DATA{ })
 {
 }
 
 User::~User()
 {
+	delete this->m_io;
 }
 
 static Strings SplitData(const char data[])
@@ -57,7 +58,8 @@ void User::InsertAPokemen(const String& info)
 			std::atoi(pokemenInfos[9].c_str()),
 			std::atoi(pokemenInfos[10].c_str()),
 			std::atoi(pokemenInfos[12].c_str()),
-			std::atoi(pokemenInfos[13].c_str())
+			std::atoi(pokemenInfos[13].c_str()),
+			std::atoi(pokemenInfos[0].c_str())
 		},
 		std::atoi(pokemenInfos[11].c_str())
 	};
