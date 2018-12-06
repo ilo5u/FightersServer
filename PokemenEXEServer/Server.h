@@ -7,18 +7,18 @@ constexpr int PASSWORD_LENGTH = 80;
 typedef char UserPassword[PASSWORD_LENGTH];
 
 typedef Database    * HDatabase;
-typedef User * HUser;
+typedef User        * HUser;
+typedef OnlineUser  * HOnlineUser;
 typedef std::string   String;
 typedef std::mutex    Mutex;
 typedef SOCKET        Socket;
 typedef SOCKADDR_IN   SockaddrIn;
 typedef HANDLE        Handle;
 
-typedef std::vector<String>       Strings;
+typedef std::vector<String> Strings;
 typedef std::vector<Thread> Threads;
-typedef typename std::list<HUser> UserList;
-typedef User::BattleType   BattleType;
-typedef std::map<ULONG, HUser> Users;
+typedef std::map<ULONG, HOnlineUser> OnlineUsers;
+typedef std::list<HUser> AllUsers;
 
 class Server
 {
@@ -46,8 +46,11 @@ private:
 	SockaddrIn  m_serverAddr;
 
 	// 用户实例
-	Users m_users;
-	Mutex m_userLocker;
+	OnlineUsers m_onlineUsers;
+	Mutex m_onlineUserLocker;
+
+	AllUsers m_rankedUsers;
+	Mutex m_rankedUserLocker;
 
 	/* 重叠IO模块 */
 	Handle m_completionPort;
@@ -63,22 +66,32 @@ private:
 private:
 	bool _InitDatabase_();
 	bool _InitNetwork_();
+	void _LoadAllUsers_();
 
-	bool _AnalyzePacket_(SockaddrIn client, const Packet& recv, LPPER_IO_OPERATION_DATA perIO);
+	bool _AnalyzePacket_(SockaddrIn client, const Packet& recv);
 
-	void _DealWithLogin_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
-	void _DealWithLogon_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
-	void _DealWithLogout_(ULONG identity, LPPER_IO_OPERATION_DATA perIO);
+	void _DealWithLogin_(ULONG identity, const char data[]);
+	void _DealWithLogon_(ULONG identity, const char data[]);
+	void _DealWithLogout_(ULONG identity);
 
-	void _DealWithGetOnlineUsers_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
-	void _DealWithPVEResult_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
-	void _DealWithUpgradePokemen_(ULONG identity, const char data[], LPPER_IO_OPERATION_DATA perIO);
+	void _DealWithGetOnlineUsers_(ULONG identity, const char data[]);
+	void _DealWithPVEResult_(ULONG identity, const char data[]);
+	void _DealWithPromotePokemen_(ULONG identity, const char data[]);
+	void _DealWithAddPokemen_(ULONG identity);
+	void _DealWithSubPokemen_(ULONG identity, const char data[]);
+	void _DealWithGetPokemensByUser_(ULONG identity, const char data[]);
 
-	void _SendPacket_(HUser user, const Packet& send, LPPER_IO_OPERATION_DATA perIO);
+	void _OnLoginSuccessCallBack(HOnlineUser onlineUser, const Strings& userInfos, const Strings& queryElems);
+	void _OnConnectionLostCallBack_(LPPER_HANDLE_DATA lostClient, LPPER_IO_OPERATION_DATA lostIO);
+	void _OnUpdatePokemensCallBack_(HOnlineUser onlineUser);
+	void _OnRenewRanklistCallBack_(HOnlineUser onlineUser);
+
+
+	void _SendPacket_(HOnlineUser user, const Packet& send);
 
 private:
 	void _WorkerThread_();
 	void _ServerAcceptThread_();
-	void _BeatThread_();
+	//void _BeatThread_();
 
 };

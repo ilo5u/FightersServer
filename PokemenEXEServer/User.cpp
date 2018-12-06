@@ -6,15 +6,16 @@
 
 typedef Packet::Type    PacketType;
 
-User::User(const Socket& client, const SockaddrIn& clientAddr) :
+OnlineUser::OnlineUser(const Socket& client, const SockaddrIn& clientAddr) :
 	m_client(client), m_clientAddr(clientAddr),
-	m_username(), m_pokemens(), m_io(new PER_IO_OPERATION_DATA{ })
+	m_ioLocker(),
+	m_ioHandlerCount(0x01),
+	m_pokemens(), m_needRemove(false)
 {
 }
 
-User::~User()
+OnlineUser::~OnlineUser()
 {
-	delete this->m_io;
 }
 
 static Strings SplitData(const char data[])
@@ -40,7 +41,7 @@ static Strings SplitData(const char data[])
 }
 
 // 仅由服务器线程调用
-void User::InsertAPokemen(const String& info)
+void OnlineUser::InsertAPokemen(const String& info)
 {
 	Strings pokemenInfos = SplitData(info.c_str());
 
@@ -67,17 +68,39 @@ void User::InsertAPokemen(const String& info)
 }
 
 
-ULONG User::GetUserID() const
+ULONG OnlineUser::GetUserID() const
 {
 	return m_clientAddr.sin_addr.S_un.S_addr;
 }
 
-void User::SetUsername(const String& name)
+void OnlineUser::SetUsername(const String& name)
 {
-	m_username = name;
+	username = name;
 }
 
-std::string User::GetUsername() const
+std::string OnlineUser::GetUsername() const
 {
-	return m_username;
+	return username;
+}
+
+int OnlineUser::ReadIOCounter()
+{
+	this->m_ioLocker.lock();
+	int count = this->m_ioHandlerCount;
+	this->m_ioLocker.unlock();
+	return count;
+}
+
+void OnlineUser::IncIOCounter()
+{
+	this->m_ioLocker.lock();
+	this->m_ioHandlerCount++;
+	this->m_ioLocker.unlock();
+}
+
+void OnlineUser::DecIOCounter()
+{
+	this->m_ioLocker.lock();
+	this->m_ioHandlerCount--;
+	this->m_ioLocker.unlock();
 }

@@ -9,24 +9,30 @@ typedef SOCKADDR_IN SockaddrIn;
 typedef HANDLE      Handle;
 
 typedef std::queue<Packet>   Packets;
-typedef Pokemen::BattleStage BattleStage;
 typedef Pokemen::PokemenType PokemenType;
 
 typedef std::list<Pokemen::Pokemen> Pokemens;
 
 class Server;
-class User
+
+struct User
+{
+	/* 用户信息 */
+	String username;
+	int numberOfPokemens = 0;
+	int rounds = 0;
+	int wins = 0;
+	int tops = 0;
+};
+
+class OnlineUser : private User
 {
 	friend Server;
 public:
-	enum class BattleType
-	{
-		PVP
-	};
 
 public:
-	User(const Socket& client, const SockaddrIn& clientAddr);
-	~User();
+	OnlineUser(const Socket& client, const SockaddrIn& clientAddr);
+	~OnlineUser();
 
 public:
 	void   InsertAPokemen(const String& info);
@@ -36,15 +42,19 @@ public:
 	void   SetUsername(const String& username);
 	String GetUsername() const;
 
+public:
+	int ReadIOCounter();
+	void IncIOCounter();
+	void DecIOCounter();
+
 private:
 	/* 连接信息 */
 	const Socket m_client;
 	const SockaddrIn m_clientAddr;
-	LPPER_IO_OPERATION_DATA m_io;
 
-	/* 用户信息 */
-	String m_username;
+	Mutex m_ioLocker;
+	int   m_ioHandlerCount;
+
 	Pokemens m_pokemens;
-	int m_rounds;
-	int m_wins;
+	bool     m_needRemove;
 };

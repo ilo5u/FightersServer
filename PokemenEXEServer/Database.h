@@ -11,6 +11,7 @@ public:
 	void Disconnect();
 	bool Insert(const std::string& query);
 	bool Update(const std::string& query);
+	bool Delete(const std::string& query);
     std::vector<std::string> Select(const std::string& query, int valueCnt);
 
 private:

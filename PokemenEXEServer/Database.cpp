@@ -29,7 +29,7 @@ void Database::Disconnect()
 bool Database::Insert(const std::string& query)
 {
 	m_locker.lock();
-	int ret = mysql_real_query(&m_mysql, query.c_str(), query.size());
+	int ret = mysql_real_query(&m_mysql, query.c_str(), (unsigned long)query.size());
 	m_locker.unlock();
 	if (!ret)
 		return true;
@@ -39,7 +39,17 @@ bool Database::Insert(const std::string& query)
 bool Database::Update(const std::string& query)
 {
 	m_locker.lock();
-	int ret = mysql_real_query(&m_mysql, query.c_str(), query.size());
+	int ret = mysql_real_query(&m_mysql, query.c_str(), (unsigned long)query.size());
+	m_locker.unlock();
+	if (!ret)
+		return true;
+	return false;
+}
+
+bool Database::Delete(const std::string & query)
+{
+	m_locker.lock();
+	int ret = mysql_real_query(&m_mysql, query.c_str(), (unsigned long)query.size());
 	m_locker.unlock();
 	if (!ret)
 		return true;
@@ -54,7 +64,7 @@ std::vector<std::string> Database::Select(const std::string& query, int valueCnt
     std::vector<std::string> queryResult;
 	std::string rowResult;
 	m_locker.lock();
-    int iRetVal = mysql_real_query(&m_mysql, query.c_str(), query.size());
+    int iRetVal = mysql_real_query(&m_mysql, query.c_str(), (unsigned long)query.size());
     if (!iRetVal)
     {
 		sqlResult = mysql_store_result(&m_mysql);
