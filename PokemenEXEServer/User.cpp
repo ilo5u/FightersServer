@@ -109,6 +109,11 @@ std::string OnlineUser::GetUsername() const
 	return username;
 }
 
+String OnlineUser::GetOpponent() const
+{
+	return m_opponent;
+}
+
 int OnlineUser::ReadIORecvCounter()
 {
 	this->m_ioRecvLocker.lock();

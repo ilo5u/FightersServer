@@ -1006,6 +1006,18 @@ void Server::_DealWithPVPCancel_(LPPER_HANDLE_DATA client)
 			sprintf(sendPacket.data, "%s", onlineUser->username.c_str());
 
 			this->_SendPacket_(oppoent->second, sendPacket);
+
+			/* 断开在线连接 */
+			OnlineUsers::iterator opponent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
+				[&onlineUser](const std::pair<ULONG, HOnlineUser>& perUser) {
+				return perUser.second->GetOpponent() == onlineUser->GetUsername();
+			});
+			if (opponent != this->m_onlineUsers.end())
+			{
+				/* 断掉在线对战的另一方 */
+				oppoent->second->m_opponent.clear();
+			}
+			onlineUser->m_opponent.clear();
 		}
 		this->_RecvPacket_(onlineUser);
 	}
@@ -1250,7 +1262,7 @@ void Server::_OnConnectionLostCallBack_(LPPER_HANDLE_DATA lostClient, LPPER_IO_O
 		/* 断线补偿处理 */
 		OnlineUsers::iterator opponent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
 			[&lostUser](const std::pair<ULONG, HOnlineUser>& perUser) {
-			return perUser.second->GetUsername() == lostUser->GetUsername();
+			return perUser.second->GetOpponent() == lostUser->GetUsername();
 		});
 		if (opponent != this->m_onlineUsers.end())
 		{

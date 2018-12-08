@@ -48,6 +48,7 @@ public:
 	ULONG  GetUserID() const;
 	void   SetUsername(const String& username);
 	String GetUsername() const;
+	String GetOpponent() const;
 
 public:
 	/* IO重叠资源控制 */
