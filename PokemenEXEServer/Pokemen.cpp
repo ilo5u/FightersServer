@@ -332,7 +332,7 @@ namespace Pokemen
 
 	bool Pokemen::Promote(int career)
 	{
-		if (career < 0 || career > 2)
+		if (career < 1 || career > 2)
 			return false;
 		switch (this->m_instance->GetType())
 		{

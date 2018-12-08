@@ -18,7 +18,7 @@ typedef HANDLE        Handle;
 typedef std::vector<String> Strings;
 typedef std::vector<Thread> Threads;
 typedef std::map<ULONG, HOnlineUser> OnlineUsers;
-typedef std::list<HUser> AllUsers;
+typedef std::list<HUser> RankedUsers;
 
 class Server
 {
@@ -49,7 +49,7 @@ private:
 	OnlineUsers m_onlineUsers;
 	Mutex m_onlineUserLocker;
 
-	AllUsers m_rankedUsers;
+	RankedUsers m_rankedUsers;
 	Mutex m_rankedUserLocker;
 
 	/* ÖØµþIOÄ£¿é */
@@ -68,18 +68,18 @@ private:
 	bool _InitNetwork_();
 	void _LoadAllUsers_();
 
-	bool _AnalyzePacket_(SockaddrIn client, const Packet& recv);
+	bool _AnalyzePacket_(LPPER_HANDLE_DATA client, const Packet& recv);
 
-	void _DealWithLogin_(ULONG identity, const char data[]);
-	void _DealWithLogon_(ULONG identity, const char data[]);
-	void _DealWithLogout_(ULONG identity);
+	void _DealWithLogin_(LPPER_HANDLE_DATA client, const char data[]);
+	void _DealWithLogon_(LPPER_HANDLE_DATA client, const char data[]);
+	void _DealWithLogout_(LPPER_HANDLE_DATA client);
 
-	void _DealWithGetOnlineUsers_(ULONG identity, const char data[]);
-	void _DealWithPVEResult_(ULONG identity, const char data[]);
-	void _DealWithPromotePokemen_(ULONG identity, const char data[]);
-	void _DealWithAddPokemen_(ULONG identity);
-	void _DealWithSubPokemen_(ULONG identity, const char data[]);
-	void _DealWithGetPokemensByUser_(ULONG identity, const char data[]);
+	void _DealWithGetOnlineUsers_(LPPER_HANDLE_DATA client, const char data[]);
+	void _DealWithPVEResult_(LPPER_HANDLE_DATA client, const char data[]);
+	void _DealWithPromotePokemen_(LPPER_HANDLE_DATA client, const char data[]);
+	void _DealWithAddPokemen_(LPPER_HANDLE_DATA client);
+	void _DealWithSubPokemen_(LPPER_HANDLE_DATA client, const char data[]);
+	void _DealWithGetPokemensByUser_(LPPER_HANDLE_DATA client, const char data[]);
 
 	void _OnLoginSuccessCallBack(HOnlineUser onlineUser, const Strings& userInfos, const Strings& queryElems);
 	void _OnConnectionLostCallBack_(LPPER_HANDLE_DATA lostClient, LPPER_IO_OPERATION_DATA lostIO);
@@ -87,7 +87,7 @@ private:
 	void _OnRenewRanklistCallBack_(HOnlineUser onlineUser);
 
 
-	void _SendPacket_(HOnlineUser user, const Packet& send);
+	bool _SendPacket_(HOnlineUser user, const Packet& send);
 
 private:
 	void _WorkerThread_();
