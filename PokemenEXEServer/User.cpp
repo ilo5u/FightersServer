@@ -8,8 +8,8 @@ typedef Packet::Type    PacketType;
 
 OnlineUser::OnlineUser(const Socket& client, const SockaddrIn& clientAddr) :
 	m_client(client), m_clientAddr(clientAddr),
-	m_ioLocker(),
-	m_ioHandlerCount(0x01),
+	m_ioSendLocker(), m_ioRecvLocker(),
+	m_ioSendCount(0x00), m_ioRecvCount(0x01),
 	m_pokemens(), m_needRemove(false)
 {
 }
@@ -67,6 +67,32 @@ void OnlineUser::InsertAPokemen(const String& info)
 	m_pokemens.push_back(std::move(pokemen));
 }
 
+#define ALL_POKEMEN_PROPERTIES "%d,%d,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d"
+String OnlineUser::PokemenAt(int pokemenId) const
+{
+	Pokemens::const_iterator pokemen = std::find_if(this->m_pokemens.begin(),
+		this->m_pokemens.end(),
+		[&pokemenId](const Pokemen::Pokemen& per) {
+		return per.GetId() == pokemenId;
+	});
+	if (pokemen != this->m_pokemens.end())
+	{
+		char pokemenInfos[BUFSIZ];
+		sprintf(pokemenInfos, ALL_POKEMEN_PROPERTIES,
+			pokemen->GetId(),
+			(int)pokemen->GetType(), pokemen->GetName().c_str(),
+			pokemen->GetHpoints(), pokemen->GetAttack(),
+			pokemen->GetDefense(), pokemen->GetAgility(),
+			pokemen->GetInterval(), pokemen->GetCritical(),
+			pokemen->GetHitratio(), pokemen->GetParryratio(),
+			pokemen->GetCareer(),
+			pokemen->GetExp(), pokemen->GetLevel()
+		);
+		return { pokemenInfos };
+	}
+	return { };
+}
+
 
 ULONG OnlineUser::GetUserID() const
 {
@@ -83,24 +109,46 @@ std::string OnlineUser::GetUsername() const
 	return username;
 }
 
-int OnlineUser::ReadIOCounter()
+int OnlineUser::ReadIORecvCounter()
 {
-	this->m_ioLocker.lock();
-	int count = this->m_ioHandlerCount;
-	this->m_ioLocker.unlock();
+	this->m_ioRecvLocker.lock();
+	int count = this->m_ioRecvCount;
+	this->m_ioRecvLocker.unlock();
 	return count;
 }
 
-void OnlineUser::IncIOCounter()
+void OnlineUser::IncIORecvCounter()
 {
-	this->m_ioLocker.lock();
-	this->m_ioHandlerCount++;
-	this->m_ioLocker.unlock();
+	this->m_ioRecvLocker.lock();
+	this->m_ioRecvCount++;
+	this->m_ioRecvLocker.unlock();
 }
 
-void OnlineUser::DecIOCounter()
+void OnlineUser::DecIORecvCounter()
 {
-	this->m_ioLocker.lock();
-	this->m_ioHandlerCount--;
-	this->m_ioLocker.unlock();
+	this->m_ioRecvLocker.lock();
+	this->m_ioRecvCount--;
+	this->m_ioRecvLocker.unlock();
+}
+
+int OnlineUser::ReadIOSendCounter()
+{
+	this->m_ioSendLocker.lock();
+	int count = this->m_ioSendCount;
+	this->m_ioSendLocker.unlock();
+	return count;
+}
+
+void OnlineUser::IncIOSendCounter()
+{
+	this->m_ioSendLocker.lock();
+	this->m_ioSendCount++;
+	this->m_ioSendLocker.unlock();
+}
+
+void OnlineUser::DecIOSendCounter()
+{
+	this->m_ioSendLocker.lock();
+	this->m_ioSendCount--;
+	this->m_ioSendLocker.unlock();
 }

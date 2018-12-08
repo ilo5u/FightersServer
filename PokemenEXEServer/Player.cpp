@@ -20,11 +20,6 @@ namespace Pokemen
 	{
 	}
 
-	bool BasePlayer::InState(BasePlayer::State inState) const
-	{
-		return (static_cast<uint16_t>(this->m_state) & static_cast<uint16_t>(inState)) == 0 ? false : true;
-	}
-
 	/// <summary>
 	/// 
 	/// </summary>
@@ -36,18 +31,12 @@ namespace Pokemen
 		    (int)hitpoints, (int)attack, (int)defense, (int)agility,
 			(int)interval, (int)critical, (int)hitratio, (int)parryratio,
 			(int)0x0, (int)0x1,
-			(int)id),
-		m_anger(0x0), m_state(State::NORMAL),
-		m_hpointsLimitation(hitpoints),
-		m_effects(), m_stateRoundsCnt()
+			(int)id)
 	{
 	}
 
 	BasePlayer::BasePlayer(const Property& prop) :
-		m_property(prop),
-		m_anger(0x0), m_state(State::NORMAL),
-		m_hpointsLimitation(prop.m_hpoints),
-		m_effects(), m_stateRoundsCnt()
+		m_property(prop)
 	{
 	}
 
@@ -56,31 +45,6 @@ namespace Pokemen
 	/// </summary>
 	BasePlayer::~BasePlayer()
 	{
-	}
-
-	bool BasePlayer::SetAnger(int anger)
-	{
-		this->m_anger = anger;
-		return false;
-	}
-
-	bool BasePlayer::Upgrade(int extra)
-	{
-		this->m_property.m_exp
-			= std::min<Value>(
-				this->m_property.m_exp + extra, 
-				CommonBasicValues::levelLimitation * CommonBasicValues::exp - 1
-				);
-
-		Value oldlevel = this->m_property.m_level;
-		this->m_property.m_level 
-			= this->m_property.m_exp / CommonBasicValues::exp + 1;
-		if (this->m_property.m_level > oldlevel)
-		{
-			_LevelUpPropertiesDistributor_();
-			return true;
-		}
-		return false;
 	}
 
 	Id BasePlayer::GetId() const
@@ -153,53 +117,7 @@ namespace Pokemen
 		this->m_property = prop;
 	}
 
-	Value BasePlayer::GetAnger() const
-	{
-		return this->m_anger;
-	}
-
-	bool BasePlayer::SetDizzyingRounds(Value rounds)
-	{
-		this->m_stateRoundsCnt.dizzying = rounds;
-		return false;
-	}
-
-	bool BasePlayer::SetBleedRounds(Value rounds)
-	{
-		this->m_stateRoundsCnt.bleed = rounds;
-		return false;
-	}
-
-	bool BasePlayer::SetSunderedRounds(Value rounds)
-	{
-		this->m_stateRoundsCnt.sundered = rounds;
-		return false;
-	}
-
-	bool BasePlayer::SetSlowedRounds(Value rounds)
-	{
-		this->m_stateRoundsCnt.slowed = rounds;
-		return false;
-	}
-
-	bool BasePlayer::SetSilentRounds(Value rounds)
-	{
-		this->m_stateRoundsCnt.silent = rounds;
-		return false;
-	}
-
-	bool BasePlayer::SetWeakenRounds(Value rounds)
-	{
-		this->m_stateRoundsCnt.weaken = rounds;
-		return false;
-	}
-
-	void BasePlayer::SetMaxHpoints()
-	{
-		this->m_hpointsLimitation = this->m_property.m_hpoints;
-	}
-
-	/// <summary>
+/// <summary>
 /// 
 /// </summary>
 	Value BasePlayer::IntervalValueCalculator(Value base, Value primary_affect, Value secondary_affect)
@@ -231,49 +149,8 @@ namespace Pokemen
 		return base + static_cast<Value>(4.0 * std::sqrt((double)primary_affect) - std::sqrt((double)secondary_affect));
 	}
 
-	/// <summary>
-	/// 
-	/// </summary>
-	Value BasePlayer::AttackDamageCalculator(Value primary_affect, Value secondary_affect)
-	{
-		secondary_affect /= secondary_affect;
-		return _Random(primary_affect % 20 + 1) 
-			+ std::max<Value>(0x1, static_cast<Value>(((double)primary_affect * (double)primary_affect) / ((double)primary_affect + (double)secondary_affect)));
-	}
-
-	/// <summary>
-	/// 
-	/// </summary>
-	Value BasePlayer::HealingHpointsCalculator(Value primary_affect, Value secondary_affect)
-	{
-		return static_cast<Value>((double)primary_affect * ((double)secondary_affect / 200.0));
-	}
-
-	/// <summary>
-	/// 
-	/// </summary>
-	Value BasePlayer::BloodingDamageCalculator(Value primary_affect, Value secondary_affect)
-	{
-		return static_cast<Value>(((double)primary_affect * 10.0) / std::sqrt((double)secondary_affect));
-	}
-
 	Value BasePlayer::ConvertValueByPercent(Value base, Value index)
 	{
 		return static_cast<Value>((double)base * ((double)index / 100.0));
 	}
-
-	bool BasePlayer::AddState(BasePlayer::State newState)
-	{
-		this->m_state 
-			= static_cast<BasePlayer::State>(static_cast<uint16_t>(this->m_state) | static_cast<uint16_t>(newState));
-		return false;
-	}
-
-	bool BasePlayer::SubState(BasePlayer::State oldState)
-	{
-		this->m_state 
-			= static_cast<BasePlayer::State>(static_cast<uint16_t>(this->m_state) & (~static_cast<uint16_t>(oldState)));
-		return false;
-	}
-
 }

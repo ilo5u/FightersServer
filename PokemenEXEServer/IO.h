@@ -2,6 +2,12 @@
 
 constexpr int BUFLEN = 2048;
 
+/// <summary>
+/// IO包结构
+/// +------+------+
+/// + 类型 + 数据 +
+/// +------+------+
+/// </summary>
 struct Packet
 {
 	enum class Type
@@ -21,6 +27,10 @@ struct Packet
 		PVP_FAILED = 0x0030,
 		PVP_BATTLE = 0x0040,
 		PVP_RESULT = 0x0050,
+		PVP_MESSAGE = 0x0070,
+		PVP_ACCEPT = 0x0090,
+		PVP_CANCEL = 0x00A0,
+		PVP_BUSY = 0x00C0,
 
 		SET_ONLINE_USERS = 0x0100,
 		UPDATE_ONLINE_USERS = 0x0200,

@@ -35,24 +35,14 @@ namespace Pokemen
 		int GetCritical() const;
 		int GetHitratio() const;
 		int GetParryratio() const;
-		int GetAnger() const;
 
 		int GetCareer() const;
 		int GetLevel() const;
 		int GetExp() const;
 
 	public:
-		bool Upgrade(int exp);
-		bool SetPrimarySkill(int skill);
 		bool Promote(int career);
 		void RenewProperty(const ::Pokemen::Property& prop, int carrer);
-
-	public:
-		void SetMaxHpoints();
-		bool InState(BasePlayer::State nowState) const;
-
-	public:
-		String Attack(Pokemen& opponent);
 
 	private:
 		PBasePlayer m_instance;

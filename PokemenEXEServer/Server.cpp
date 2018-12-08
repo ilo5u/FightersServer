@@ -3,7 +3,7 @@
 
 typedef Packet::Type PacketType;
 
-constexpr int  PORT = 27893;
+constexpr int  PORT = 27893; // 默认端口号
 
 constexpr int  INIT_SUCCESS        = 0x00000000;
 constexpr int  INIT_DATABASE_ERROR = 0xFFFFFFFE;
@@ -15,6 +15,11 @@ constexpr auto DATABASE_NAME     = "server";
 
 #define NUMBER_OF_POKEMEN_COLUMNS 14
 
+/// <summary>
+/// 按换行符进行字符串切割
+/// </summary>
+/// <param name="data"></param>
+/// <returns></returns>
 static Strings SplitData(const char data[])
 {
 	String per;
@@ -37,6 +42,12 @@ static Strings SplitData(const char data[])
 	return ans;
 }
 
+/// <summary>
+/// 依据给定字符进行字符串切割
+/// </summary>
+/// <param name="data"></param>
+/// <param name="ch"></param>
+/// <returns></returns>
 static Strings SplitData(const char data[], char ch)
 {
 	String per;
@@ -65,7 +76,7 @@ Server::Server() :
 	m_onlineUsers(), m_onlineUserLocker(),
 	m_rankedUsers(), m_rankedUserLocker(),
 	m_completionPort(nullptr), 
-	m_accepter(), m_workers(), m_beater(),
+	m_accepter(), m_workers(),
 	m_errorOccured(false),
 	m_isServerOn(false)
 {
@@ -74,28 +85,33 @@ Server::Server() :
 Server::~Server()
 {
 	this->m_isServerOn = false;
-	if (this->m_beater.joinable())
-		this->m_beater.join();
-
 	if (this->m_accepter.joinable())
 		this->m_accepter.join();
 
 	delete this->m_hDatabase;
 }
 
+/// <summary>
+/// 初始化服务器
+/// </summary>
+/// <returns></returns>
 int Server::Init()
 {
 	if (!_InitDatabase_())
 		return INIT_DATABASE_ERROR;
 
 	/* 加载所有用户记录 */
-	_LoadAllUsers_();
+	_LoadRankedUsers_();
 
 	if (!_InitNetwork_())
 		return INIT_NETWORK_ERROR;
 	return INIT_SUCCESS;
 }
 
+/// <summary>
+/// 运行服务器
+/// </summary>
+/// <returns></returns>
 bool Server::Run()
 {
 	if (this->m_isServerOn)
@@ -163,6 +179,10 @@ bool Server::Run()
 	return true;
 }
 
+/// <summary>
+/// 获取已连接的IP主机
+/// </summary>
+/// <returns></returns>
 String Server::GetClients() const
 {
 	String queryResult;
@@ -184,11 +204,19 @@ String Server::GetClients() const
 	return queryResult;
 }
 
+/// <summary>
+/// 初始化数据库
+/// </summary>
+/// <returns></returns>
 bool Server::_InitDatabase_()
 {
 	return m_hDatabase->Connect(DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME);
 }
 
+/// <summary>
+/// 初始化网络
+/// </summary>
+/// <returns></returns>
 bool Server::_InitNetwork_()
 {
 	try
@@ -210,7 +238,10 @@ bool Server::_InitNetwork_()
 }
 
 #define LOAD_ALL_USERS_QUERY "select name,numberOfPokemens,rounds,wins from users"
-void Server::_LoadAllUsers_()
+/// <summary>
+/// 加载排行榜
+/// </summary>
+void Server::_LoadRankedUsers_()
 {
 	char queryString[BUFSIZ];
 	sprintf(queryString, LOAD_ALL_USERS_QUERY);
@@ -235,6 +266,12 @@ void Server::_LoadAllUsers_()
 	this->m_rankedUserLocker.unlock();
 }
 
+/// <summary>
+/// 分析数据包类型
+/// </summary>
+/// <param name="client"></param>
+/// <param name="recv"></param>
+/// <returns></returns>
 bool Server::_AnalyzePacket_(LPPER_HANDLE_DATA client, const Packet& recv)
 {
 	printf("数据包类型%d\n", (int)recv.type);
@@ -276,12 +313,48 @@ bool Server::_AnalyzePacket_(LPPER_HANDLE_DATA client, const Packet& recv)
 		_DealWithGetPokemensByUser_(client, recv.data);
 		return true;
 
+	case PacketType::UPDATE_RANKLIST:
+		_DealWithUpdateRanklist_(client);
+		return true;
+
+	case PacketType::PVP_REQUEST:
+		_DealWithPVPRequest_(client, recv.data);
+		return true;
+
+	case PacketType::PVP_CANCEL:
+		_DealWithPVPCancel_(client);
+		return true;
+
+	case PacketType::PVP_ACCEPT:
+		_DealWithPVPAccept_(client, recv.data);
+		return true;
+
+	case PacketType::PVP_BUSY:
+		_DealWithPVPBusy_(client, recv.data);
+		return true;
+
+	case PacketType::PVP_MESSAGE:
+		_DealWithPVPMessage_(client, recv.data);
+		return true;
+
+	case PacketType::PVP_RESULT:
+		_DealWithPVPResult_(client, recv.data);
+		return true;
+
+	case PacketType::PVP_BATTLE:
+		_DealWithPVPBattle_(client, recv.data);
+		return true;
+
 	default:
 		return false;
 	}
 }
 
-#define SELECT_USER_QUERYSTRING "select numberOfPokemens,rounds,wins,tops from users where name='%s' and password='%s'"
+/* +++++++++++++++++++++++ 数据库查询语句块 +++++++++++++++++++++++ */
+#define SELECT_USER_QUERYSTRING "\
+select numberOfPokemens,rounds,wins,tops from users \
+where name='%s' and password='%s'"
+
 #define NUMBER_OF_USER_COLUMNS 4
 
 #define INSERT_POKEMEN_QUERYSTRING 	"\
@@ -306,16 +379,22 @@ update pokemens set hpoints=%d,attack=%d,defense=%d,agility=%d,interva=%d,critic
 career=%d,exp=%d,level=%d where identity=%d"
 
 #define POKEMEN_ALL_PROPERTIES "%d\n%d\n%s\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n"
+/* +++++++++++++++++++++++ 数据库查询语句块 +++++++++++++++++++++++ */
+
 const static int initNumberOfPokemens = 3;
+
+/// <summary>
+/// 用户登陆
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
 void Server::_DealWithLogin_(LPPER_HANDLE_DATA client, const char data[])
 {
-	Strings queryResult;
+	Strings queryResult; // 查询结果
 	char    szQuery[BUFLEN];
 
 	Strings userInfos = SplitData(data);
 	Packet  sendPacket;
-
-	printf("%s %s\n", inet_ntoa(client->addr.sin_addr), userInfos[0].c_str());
 
 	int userId = client->addr.sin_addr.S_un.S_addr;
 	try
@@ -330,9 +409,22 @@ void Server::_DealWithLogin_(LPPER_HANDLE_DATA client, const char data[])
 		if (onlineUser != nullptr)
 		{
 			// 反馈登陆信息
+			bool existed = true;
+			this->m_onlineUserLocker.lock();
+			if (std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
+				[&userInfos](const std::pair<ULONG, HOnlineUser>& perUser) {
+				return perUser.second->username == userInfos[0];
+			}) == this->m_onlineUsers.end())
+			{
+				existed = false;
+			}
+			this->m_onlineUserLocker.unlock();
 			Strings queryElems;
-			if (!onlineUser->username.empty() || queryResult.empty())
+			if (existed || queryResult.empty())
+			{
 				sendPacket.type = PacketType::LOGIN_FAILED;
+				printf("登陆失败 %s %s\n", inet_ntoa(client->addr.sin_addr), userInfos[0].c_str());
+			}
 			else
 			{
 				queryElems = SplitData(queryResult[0].c_str());
@@ -349,9 +441,8 @@ void Server::_DealWithLogin_(LPPER_HANDLE_DATA client, const char data[])
 			}
 		}
 	}
-	catch (const std::exception& e)
+	catch (const std::exception&)
 	{
-		OutputDebugStringA(e.what());
 	}
 }
 
@@ -422,44 +513,9 @@ void Server::_OnLoginSuccessCallBack(HOnlineUser onlineUser, const Strings& user
 		(*currentUser)->wins = onlineUser->wins;
 		(*currentUser)->tops = onlineUser->tops;
 	}
-	this->_OnUpdatePokemensCallBack_(onlineUser);
 
-	/* 向该用户反馈排行榜信息 */
-	char sendString[BUFLEN];
-	sendString[0] = 0x0;
-	int  userCount = 0;
-
-	sendPacket.type = PacketType::SET_RANKLIST;
-	this->m_rankedUserLocker.lock();
-	for (const auto& perUser : this->m_rankedUsers)
-	{ /* 将排行榜信息以最多10个为一组打包发送 */
-		if (userCount == 10)
-		{
-			sprintf(sendPacket.data, "10\n%s", sendString);
-			_SendPacket_(onlineUser, sendPacket);
-			sprintf(sendString,
-				"%s,%d,%d,%d,%d\n",
-				perUser->username.c_str(), perUser->numberOfPokemens,
-				perUser->rounds, perUser->wins, perUser->tops
-			);
-		}
-		else
-		{
-			sprintf(sendString + std::strlen(sendString),
-				"%s,%d,%d,%d,%d\n",
-				perUser->username.c_str(), perUser->numberOfPokemens,
-				perUser->rounds, perUser->wins, perUser->tops
-			);
-		}
-		++userCount;
-	}
-	this->m_rankedUserLocker.unlock();
-	if (userCount > 0)
-	{
-		printf("%s\n", sendString);
-		sprintf(sendPacket.data, "%d\n%s", userCount, sendString);
-		_SendPacket_(onlineUser, sendPacket);
-	}
+	this->_OnUpdatePokemensCallBack_(onlineUser); // 反馈小精灵
+	this->_OnUpdateRanklistCallBack_(onlineUser); // 反馈排行榜
 
 	/* 向其他在线用户反馈该用户的在线状态 */
 	sendPacket.type = PacketType::UPDATE_ONLINE_USERS;
@@ -475,9 +531,14 @@ void Server::_OnLoginSuccessCallBack(HOnlineUser onlineUser, const Strings& user
 	this->m_onlineUserLocker.unlock();
 }
 
+/// <summary>
+/// 用户注册
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
 void Server::_DealWithLogon_(LPPER_HANDLE_DATA client, const char data[])
 {
-	Strings queryResult;
+	Strings queryResult; // 查询结果
 	char    szQuery[BUFLEN];
 
 	Strings userInfos = SplitData(data);
@@ -487,9 +548,9 @@ void Server::_DealWithLogon_(LPPER_HANDLE_DATA client, const char data[])
 	try
 	{
 		this->m_onlineUserLocker.lock();
-		HOnlineUser user = this->m_onlineUsers[userId];
+		HOnlineUser onlineUser = this->m_onlineUsers[userId];
 		this->m_onlineUserLocker.unlock();
-		if (user != nullptr)
+		if (onlineUser != nullptr)
 		{
 			sprintf(szQuery,
 				"insert into users values('%s','%s',0, 0, 0, 0)",
@@ -500,29 +561,34 @@ void Server::_DealWithLogon_(LPPER_HANDLE_DATA client, const char data[])
 				sendPacket.type = PacketType::LOGON_SUCCESS;
 			else
 				sendPacket.type = PacketType::LOGON_FAILED;
-			_SendPacket_(user, sendPacket);
+			_SendPacket_(onlineUser, sendPacket);
 		}
 	}
-	catch (const std::exception& e)
+	catch (const std::exception&)
 	{
-		OutputDebugStringA(e.what());
 	}
 }
 
+/// <summary>
+/// 用户注销
+/// </summary>
+/// <param name="client"></param>
 void Server::_DealWithLogout_(LPPER_HANDLE_DATA client)
 {
-	Strings queryResult;
-	Packet sendPacket;
 	try
 	{
 		this->_OnConnectionLostCallBack_(client, nullptr);
 	}
-	catch (const std::exception& e)
+	catch (const std::exception&)
 	{
-		OutputDebugStringA(e.what());
 	}
 }
 
+/// <summary>
+/// 获取在线用户
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
 void Server::_DealWithGetOnlineUsers_(LPPER_HANDLE_DATA client, const char data[])
 {
 	Packet sendPacket;
@@ -563,15 +629,19 @@ void Server::_DealWithGetOnlineUsers_(LPPER_HANDLE_DATA client, const char data[
 			}
 		}
 	}
-	catch (const std::exception& e)
+	catch (const std::exception&)
 	{
-		OutputDebugStringA(e.what());
 	}
 }
 
+/// <summary>
+/// 处理用户与电脑战斗的结果
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
 void Server::_DealWithPVEResult_(LPPER_HANDLE_DATA client, const char data[])
 {
-	Strings queryResult;
+	Strings queryResult; // 查询结果
 	char    szQuery[BUFLEN];
 	Packet  sendPacket;
 	Strings infos = SplitData(data);
@@ -658,9 +728,14 @@ void Server::_DealWithPVEResult_(LPPER_HANDLE_DATA client, const char data[])
 	}
 }
 
+/// <summary>
+/// 小精灵转职
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
 void Server::_DealWithPromotePokemen_(LPPER_HANDLE_DATA client, const char data[])
 {
-	Strings queryResult;
+	Strings queryResult; // 查询结果
 	char    szQuery[BUFLEN];
 	Packet  sendPacket;
 	int userId = client->addr.sin_addr.S_un.S_addr;
@@ -681,6 +756,7 @@ void Server::_DealWithPromotePokemen_(LPPER_HANDLE_DATA client, const char data[
 			});
 			if (pokemen != onlineUser->m_pokemens.end() && careerType < 3)
 			{
+				/* 转职 */
 				pokemen->Promote(careerType);
 				sprintf(szQuery,
 					UPDATE_POKEMEN_QUERYSTRING,
@@ -709,9 +785,13 @@ void Server::_DealWithPromotePokemen_(LPPER_HANDLE_DATA client, const char data[
 	}
 }
 
+/// <summary>
+/// 用户获得一只新的小精灵
+/// </summary>
+/// <param name="client"></param>
 void Server::_DealWithAddPokemen_(LPPER_HANDLE_DATA client)
 {
-	Strings queryResult;
+	Strings queryResult; // 查询结果
 	char    szQuery[BUFLEN];
 	Packet  sendPacket;
 	int userId = client->addr.sin_addr.S_un.S_addr;
@@ -721,6 +801,7 @@ void Server::_DealWithAddPokemen_(LPPER_HANDLE_DATA client)
 		HOnlineUser onlineUser = this->m_onlineUsers[userId];
 		this->m_onlineUserLocker.unlock();
 
+		/* 当用户断开连接时也将进行精灵回收 */
 		onlineUser->m_needRemove = false;
 
 		/* 为用户新发放一个小精灵 */
@@ -766,15 +847,17 @@ void Server::_DealWithAddPokemen_(LPPER_HANDLE_DATA client)
 	}
 	catch (std::exception&)
 	{
-
 	}
 }
 
 #define REMOVE_POKEMEN_QUERY "delete from pokemens where identity=%d"
+/// <summary>
+/// 用户抛弃一个小精灵
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
 void Server::_DealWithSubPokemen_(LPPER_HANDLE_DATA client, const char data[])
 {
-	Strings queryResult;
-	char    szQuery[BUFLEN];
 	Packet  sendPacket;
 	int userId = client->addr.sin_addr.S_un.S_addr;
 	try
@@ -791,83 +874,22 @@ void Server::_DealWithSubPokemen_(LPPER_HANDLE_DATA client, const char data[])
 		}
 		else if (removeId > 0)
 		{
-			onlineUser->m_needRemove = false;
-
-			sprintf(szQuery, REMOVE_POKEMEN_QUERY, removeId);
-			this->m_hDatabase->Delete(szQuery);
-
-			--onlineUser->numberOfPokemens;
-			bool decOfTops = false;
-			onlineUser->m_pokemens.remove_if([&removeId, &decOfTops](const Pokemen::Pokemen& pokemen) {
-				if (pokemen.GetId() == removeId)
-				{
-					if (pokemen.GetLevel() == 15)
-						decOfTops = true;
-					return true;
-				}
-				return false;
-			});
-			if (decOfTops == true)
-			{ /* 减少一个高阶精灵 */
-				--onlineUser->tops;
-			}
-
-			if (onlineUser->numberOfPokemens == 0)
-			{
-				/* 为用户新发放一个小精灵 */
-				Pokemen::Pokemen pokemen{ PokemenType::DEFAULT, 0x1 };
-				sprintf(szQuery, INSERT_POKEMEN_QUERYSTRING,
-					onlineUser->username.c_str(),
-					(int)pokemen.GetType(), pokemen.GetName().c_str(),
-					pokemen.GetHpoints(), pokemen.GetAttack(),
-					pokemen.GetDefense(), pokemen.GetAgility(),
-					pokemen.GetInterval(), pokemen.GetCritical(),
-					pokemen.GetHitratio(), pokemen.GetParryratio(),
-					pokemen.GetCareer(),
-					pokemen.GetExp(), pokemen.GetLevel()
-				);
-				this->m_hDatabase->Insert(szQuery);
-
-				onlineUser->numberOfPokemens = 1;
-				sprintf(szQuery, "update users set numberOfPokemens=%d where name='%s'",
-					onlineUser->numberOfPokemens, onlineUser->username.c_str()
-				);
-				this->m_hDatabase->Update(szQuery);
-
-				/* 反馈该用户所拥有的小精灵 */
-				sendPacket.type = PacketType::UPDATE_POKEMENS;
-				sprintf(szQuery, SELECT_POKEMEN_BY_USER_QUERYSTRING, onlineUser->username.c_str());
-				queryResult = this->m_hDatabase->Select(szQuery, NUMBER_OF_POKEMEN_COLUMNS);
-				for (const auto& pokemen : queryResult)
-				{
-					onlineUser->InsertAPokemen(pokemen);
-					sprintf(sendPacket.data, pokemen.c_str());
-					_SendPacket_(onlineUser, sendPacket);
-				}
-			}
-
-			/* 更新用户列表数据 */
-			this->m_rankedUserLocker.lock();
-			RankedUsers::iterator rank = std::find_if(this->m_rankedUsers.begin(), this->m_rankedUsers.end(), [&onlineUser](HUser perUser) {
-				return perUser->username.compare(onlineUser->username);
-			});
-			(*rank)->numberOfPokemens = onlineUser->numberOfPokemens;
-			(*rank)->numberOfPokemens = onlineUser->tops;
-			this->m_rankedUserLocker.unlock();
-
-			/* 向其他所有在线用户发送更新排行榜的通知 */
-			this->_OnRenewRanklistCallBack_(onlineUser);
+			this->_OnRemovePokemenCallBack_(onlineUser, removeId);
 		}
 	}
 	catch (std::exception&)
 	{
-
 	}
 }
 
+/// <summary>
+/// 查询其他用户的小精灵
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
 void Server::_DealWithGetPokemensByUser_(LPPER_HANDLE_DATA client, const char data[])
 {
-	Strings queryResult;
+	Strings queryResult; // 查询结果
 	char    szQuery[BUFLEN];
 	Packet  sendPacket;
 	int userId = client->addr.sin_addr.S_un.S_addr;
@@ -892,10 +914,310 @@ void Server::_DealWithGetPokemensByUser_(LPPER_HANDLE_DATA client, const char da
 	}
 	catch (std::exception&)
 	{
-
 	}
 }
 
+/// <summary>
+/// 获取排行榜
+/// </summary>
+/// <param name="client"></param>
+void Server::_DealWithUpdateRanklist_(LPPER_HANDLE_DATA client)
+{
+	int userId = client->addr.sin_addr.S_un.S_addr;
+	this->m_onlineUserLocker.lock();
+	HOnlineUser onlineUser = this->m_onlineUsers[userId];
+	this->m_onlineUserLocker.unlock();
+	if (onlineUser != nullptr)
+	{
+		this->_OnUpdateRanklistCallBack_(onlineUser);
+	}
+}
+
+/// <summary>
+/// 用户请求在线对战
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
+void Server::_DealWithPVPRequest_(LPPER_HANDLE_DATA client, const char data[])
+{
+	int userId = client->addr.sin_addr.S_un.S_addr;
+	this->m_onlineUserLocker.lock();
+	HOnlineUser onlineUser = this->m_onlineUsers[userId];
+	this->m_onlineUserLocker.unlock();
+
+	Packet sendPacket;
+	Strings userInfos = SplitData(data);
+	if (onlineUser != nullptr)
+	{
+		bool existed = false;
+		this->m_onlineUserLocker.lock();
+		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
+			[&userInfos](const std::pair<ULONG, HOnlineUser>& perUser) {
+			return perUser.second->username == userInfos[0];
+		});
+		if (oppoent != this->m_onlineUsers.end())
+		{
+			existed = true;
+		}
+		this->m_onlineUserLocker.unlock();
+
+		if (existed)
+		{
+			onlineUser->m_opponent = userInfos[0];
+			sendPacket.type = PacketType::PVP_REQUEST;
+			sprintf(sendPacket.data, "%s", onlineUser->username.c_str());
+			
+			this->_SendPacket_(oppoent->second, sendPacket);
+		}
+		this->_RecvPacket_(onlineUser);
+	}
+}
+
+/// <summary>
+/// 用户取消对战
+/// </summary>
+/// <param name="client"></param>
+void Server::_DealWithPVPCancel_(LPPER_HANDLE_DATA client)
+{
+	int userId = client->addr.sin_addr.S_un.S_addr;
+	this->m_onlineUserLocker.lock();
+	HOnlineUser onlineUser = this->m_onlineUsers[userId];
+	this->m_onlineUserLocker.unlock();
+
+	Packet sendPacket;
+	if (onlineUser != nullptr)
+	{
+		bool existed = false;
+		this->m_onlineUserLocker.lock();
+		String username = onlineUser->m_opponent;
+		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
+			[&username](const std::pair<ULONG, HOnlineUser>& perUser) {
+			return perUser.second->username == username;
+		});
+		if (oppoent != this->m_onlineUsers.end())
+		{
+			existed = true;
+		}
+		this->m_onlineUserLocker.unlock();
+
+		if (existed)
+		{
+			sendPacket.type = PacketType::PVP_CANCEL;
+			sprintf(sendPacket.data, "%s", onlineUser->username.c_str());
+
+			this->_SendPacket_(oppoent->second, sendPacket);
+		}
+		this->_RecvPacket_(onlineUser);
+	}
+}
+
+/// <summary>
+/// 用户接受对战
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
+void Server::_DealWithPVPAccept_(LPPER_HANDLE_DATA client, const char data[])
+{
+	int userId = client->addr.sin_addr.S_un.S_addr;
+	this->m_onlineUserLocker.lock();
+	HOnlineUser onlineUser = this->m_onlineUsers[userId];
+	this->m_onlineUserLocker.unlock();
+
+	Packet sendPacket;
+	Strings userInfos = SplitData(data);
+	if (onlineUser != nullptr)
+	{
+		bool existed = false;
+		this->m_onlineUserLocker.lock();
+		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
+			[&userInfos](const std::pair<ULONG, HOnlineUser>& perUser) {
+			return perUser.second->username == userInfos[0];
+		});
+		if (oppoent != this->m_onlineUsers.end())
+		{
+			existed = true;
+		}
+		this->m_onlineUserLocker.unlock();
+
+		if (existed)
+		{
+			/* 获取接受方的出战精灵 */
+			onlineUser->m_opponent = userInfos[0];
+			String pokemenInfos = onlineUser->PokemenAt(std::atoi(userInfos[1].c_str()));
+			sendPacket.type = PacketType::PVP_ACCEPT;
+			sprintf(sendPacket.data, "%s", pokemenInfos.c_str());
+
+			this->_SendPacket_(oppoent->second, sendPacket);
+		}
+		this->_RecvPacket_(onlineUser);
+	}
+}
+
+/// <summary>
+/// 用户正忙
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
+void Server::_DealWithPVPBusy_(LPPER_HANDLE_DATA client, const char data[])
+{
+	int userId = client->addr.sin_addr.S_un.S_addr;
+	this->m_onlineUserLocker.lock();
+	HOnlineUser onlineUser = this->m_onlineUsers[userId];
+	this->m_onlineUserLocker.unlock();
+
+	Packet sendPacket;
+	Strings userInfos = SplitData(data);
+	if (onlineUser != nullptr)
+	{
+		bool existed = false;
+		this->m_onlineUserLocker.lock();
+		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
+			[&userInfos](const std::pair<ULONG, HOnlineUser>& perUser) {
+			return perUser.second->username == userInfos[0];
+		});
+		if (oppoent != this->m_onlineUsers.end())
+		{
+			existed = true;
+		}
+		this->m_onlineUserLocker.unlock();
+
+		if (existed)
+		{
+			sendPacket.type = PacketType::PVP_BUSY;
+			sprintf(sendPacket.data, "%s", onlineUser->username.c_str());
+
+			this->_SendPacket_(oppoent->second, sendPacket);
+		}
+		this->_RecvPacket_(onlineUser);
+	}
+}
+
+/// <summary>
+/// 宿主发起开始信号
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
+void Server::_DealWithPVPBattle_(LPPER_HANDLE_DATA client, const char data[])
+{
+	int userId = client->addr.sin_addr.S_un.S_addr;
+	this->m_onlineUserLocker.lock();
+	HOnlineUser onlineUser = this->m_onlineUsers[userId];
+	this->m_onlineUserLocker.unlock();
+
+	Packet sendPacket;
+	Strings userInfos = SplitData(data);
+	if (onlineUser != nullptr)
+	{
+		bool existed = false;
+		this->m_onlineUserLocker.lock();
+		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
+			[&userInfos](const std::pair<ULONG, HOnlineUser>& perUser) {
+			return perUser.second->username == userInfos[0];
+		});
+		if (oppoent != this->m_onlineUsers.end())
+		{
+			existed = true;
+		}
+		this->m_onlineUserLocker.unlock();
+
+		if (existed)
+		{
+			/* 获取发起方的出战精灵 */
+			String pokemenInfos = onlineUser->PokemenAt(std::atoi(userInfos[1].c_str()));
+			sendPacket.type = PacketType::PVP_BATTLE;
+			sprintf(sendPacket.data, "%s", pokemenInfos.c_str());
+
+			this->_SendPacket_(oppoent->second, sendPacket);
+		}
+		this->_RecvPacket_(onlineUser);
+	}
+}
+
+/// <summary>
+/// 在线对战信息
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
+void Server::_DealWithPVPMessage_(LPPER_HANDLE_DATA client, const char data[])
+{
+	int userId = client->addr.sin_addr.S_un.S_addr;
+	this->m_onlineUserLocker.lock();
+	HOnlineUser onlineUser = this->m_onlineUsers[userId];
+	this->m_onlineUserLocker.unlock();
+
+	Packet sendPacket;
+	if (onlineUser != nullptr)
+	{
+		bool existed = false;
+		this->m_onlineUserLocker.lock();
+		String username = onlineUser->m_opponent;
+		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
+			[&username](const std::pair<ULONG, HOnlineUser>& perUser) {
+			return perUser.second->username == username;
+		});
+		if (oppoent != this->m_onlineUsers.end())
+		{
+			existed = true;
+		}
+		this->m_onlineUserLocker.unlock();
+
+		if (existed)
+		{
+			sendPacket.type = PacketType::PVP_MESSAGE;
+			sprintf(sendPacket.data, "%s", data);
+			this->_SendPacket_(oppoent->second, sendPacket);
+		}
+		this->_RecvPacket_(onlineUser);
+	}
+}
+
+/// <summary>
+/// 在线对战的结果
+/// </summary>
+/// <param name="client"></param>
+/// <param name="data"></param>
+void Server::_DealWithPVPResult_(LPPER_HANDLE_DATA client, const char data[])
+{
+	int userId = client->addr.sin_addr.S_un.S_addr;
+	this->m_onlineUserLocker.lock();
+	HOnlineUser onlineUser = this->m_onlineUsers[userId];
+	this->m_onlineUserLocker.unlock();
+
+	Packet sendPacket;
+	if (onlineUser != nullptr)
+	{
+		bool existed = false;
+		this->m_onlineUserLocker.lock();
+		String username = onlineUser->m_opponent;
+		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
+			[&username](const std::pair<ULONG, HOnlineUser>& perUser) {
+			return perUser.second->username == username;
+		});
+		if (oppoent != this->m_onlineUsers.end())
+		{
+			existed = true;
+		}
+		this->m_onlineUserLocker.unlock();
+
+		if (existed)
+		{
+			sendPacket.type = PacketType::PVP_RESULT;
+			sprintf(sendPacket.data, "%s", data);
+			this->_SendPacket_(oppoent->second, sendPacket);
+
+			/* 断开连接信息 */
+			onlineUser->m_opponent.clear();
+			oppoent->second->m_opponent.clear();
+		}
+		this->_RecvPacket_(onlineUser);
+	}
+}
+
+/// <summary>
+/// 连接丢失
+/// </summary>
+/// <param name="lostClient"></param>
+/// <param name="lostIO"></param>
 void Server::_OnConnectionLostCallBack_(LPPER_HANDLE_DATA lostClient, LPPER_IO_OPERATION_DATA lostIO)
 {
 	int lostId = lostClient->addr.sin_addr.S_un.S_addr;
@@ -905,6 +1227,7 @@ void Server::_OnConnectionLostCallBack_(LPPER_HANDLE_DATA lostClient, LPPER_IO_O
 	this->m_releaseLocker.lock();
 	if (this->m_needRelease[lostClient->client])
 	{
+		/* 通知其他用户更新在线用户列表 */
 		HOnlineUser lostUser = this->m_onlineUsers[lostId];
 		if (lostUser != nullptr)
 		{
@@ -919,9 +1242,29 @@ void Server::_OnConnectionLostCallBack_(LPPER_HANDLE_DATA lostClient, LPPER_IO_O
 					_SendPacket_(otherUser.second, sendPacket);
 				}
 			}
+			delete lostUser;
 		}
 		/* 释放连接 */
 		this->m_onlineUsers.erase(lostId);
+
+		/* 断线补偿处理 */
+		OnlineUsers::iterator opponent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
+			[&lostUser](const std::pair<ULONG, HOnlineUser>& perUser) {
+			return perUser.second->GetUsername() == lostUser->GetUsername();
+		});
+		if (opponent != this->m_onlineUsers.end())
+		{
+			/* 断掉在线对战的另一方 */
+			sendPacket.type = PacketType::PVP_RESULT;
+			sprintf(sendPacket.data, "F\n0\n");
+			this->_SendPacket_(opponent->second, sendPacket);
+		}
+
+		if (lostUser->m_needRemove)
+		{
+			/* 移除该用户的一个精灵 */
+			this->_OnRemovePokemenCallBack_(lostUser, 0);
+		}
 
 		closesocket(lostClient->client);
 		this->m_needRelease[lostClient->client] = false;
@@ -932,6 +1275,10 @@ void Server::_OnConnectionLostCallBack_(LPPER_HANDLE_DATA lostClient, LPPER_IO_O
 	this->m_onlineUserLocker.unlock();
 }
 
+/// <summary>
+/// 获取用户的精灵
+/// </summary>
+/// <param name="onlineUser"></param>
 void Server::_OnUpdatePokemensCallBack_(HOnlineUser onlineUser)
 {
 	Packet  sendPacket;
@@ -950,6 +1297,10 @@ void Server::_OnUpdatePokemensCallBack_(HOnlineUser onlineUser)
 	}
 }
 
+/// <summary>
+/// 更新排行榜
+/// </summary>
+/// <param name="onlineUser"></param>
 void Server::_OnRenewRanklistCallBack_(HOnlineUser onlineUser)
 {
 	Packet sendPacket;
@@ -967,14 +1318,145 @@ void Server::_OnRenewRanklistCallBack_(HOnlineUser onlineUser)
 	this->m_onlineUserLocker.unlock();
 }
 
-/* 投递出境数据包 */
+/// <summary>
+/// 获取排行榜
+/// </summary>
+/// <param name="onlineUser"></param>
+void Server::_OnUpdateRanklistCallBack_(HOnlineUser onlineUser)
+{
+	/* 向该用户反馈排行榜信息 */
+	char sendString[BUFLEN];
+	sendString[0] = 0x0;
+	int  userCount = 0;
+
+	Packet sendPacket;
+	sendPacket.type = PacketType::SET_RANKLIST;
+	this->m_rankedUserLocker.lock();
+	for (const auto& perUser : this->m_rankedUsers)
+	{ /* 将排行榜信息以最多10个为一组打包发送 */
+		if (userCount == 10)
+		{
+			sprintf(sendPacket.data, "10\n%s", sendString);
+			_SendPacket_(onlineUser, sendPacket);
+			sprintf(sendString,
+				"%s,%d,%d,%d,%d\n",
+				perUser->username.c_str(), perUser->numberOfPokemens,
+				perUser->rounds, perUser->wins, perUser->tops
+			);
+		}
+		else
+		{
+			sprintf(sendString + std::strlen(sendString),
+				"%s,%d,%d,%d,%d\n",
+				perUser->username.c_str(), perUser->numberOfPokemens,
+				perUser->rounds, perUser->wins, perUser->tops
+			);
+		}
+		++userCount;
+	}
+	this->m_rankedUserLocker.unlock();
+	if (userCount > 0)
+	{
+		printf("%s\n", sendString);
+		sprintf(sendPacket.data, "%d\n%s", userCount, sendString);
+		_SendPacket_(onlineUser, sendPacket);
+	}
+}
+
+void Server::_OnRemovePokemenCallBack_(HOnlineUser onlineUser, int removeId)
+{
+	Strings queryResult; // 查询结果
+	char    szQuery[BUFLEN];
+	Packet  sendPacket;
+
+	onlineUser->m_needRemove = false;
+	int pokemenId = removeId;
+	if (removeId == 0)
+	{
+		pokemenId = onlineUser->m_pokemens.front().GetId();
+	}
+
+	sprintf(szQuery, REMOVE_POKEMEN_QUERY, pokemenId);
+	this->m_hDatabase->Delete(szQuery);
+
+	--onlineUser->numberOfPokemens;
+	bool decOfTops = false;
+	onlineUser->m_pokemens.remove_if([&pokemenId, &decOfTops](const Pokemen::Pokemen& pokemen) {
+		if (pokemen.GetId() == pokemenId)
+		{
+			if (pokemen.GetLevel() == 15)
+				decOfTops = true;
+			return true;
+		}
+		return false;
+	});
+	if (decOfTops == true)
+	{ /* 减少一个高阶精灵 */
+		--onlineUser->tops;
+	}
+
+	if (onlineUser->numberOfPokemens == 0)
+	{
+		/* 为用户新发放一个小精灵 */
+		Pokemen::Pokemen pokemen{ PokemenType::DEFAULT, 0x1 };
+		sprintf(szQuery, INSERT_POKEMEN_QUERYSTRING,
+			onlineUser->username.c_str(),
+			(int)pokemen.GetType(), pokemen.GetName().c_str(),
+			pokemen.GetHpoints(), pokemen.GetAttack(),
+			pokemen.GetDefense(), pokemen.GetAgility(),
+			pokemen.GetInterval(), pokemen.GetCritical(),
+			pokemen.GetHitratio(), pokemen.GetParryratio(),
+			pokemen.GetCareer(),
+			pokemen.GetExp(), pokemen.GetLevel()
+		);
+		this->m_hDatabase->Insert(szQuery);
+
+		onlineUser->numberOfPokemens = 1;
+		sprintf(szQuery, "update users set numberOfPokemens=%d where name='%s'",
+			onlineUser->numberOfPokemens, onlineUser->username.c_str()
+		);
+		this->m_hDatabase->Update(szQuery);
+
+		if (removeId != 0)
+		{
+			/* 反馈该用户所拥有的小精灵 */
+			sendPacket.type = PacketType::UPDATE_POKEMENS;
+			sprintf(szQuery, SELECT_POKEMEN_BY_USER_QUERYSTRING, onlineUser->username.c_str());
+			queryResult = this->m_hDatabase->Select(szQuery, NUMBER_OF_POKEMEN_COLUMNS);
+			for (const auto& pokemen : queryResult)
+			{
+				onlineUser->InsertAPokemen(pokemen);
+				sprintf(sendPacket.data, pokemen.c_str());
+				_SendPacket_(onlineUser, sendPacket);
+			}
+		}
+	}
+
+	/* 更新用户列表数据 */
+	this->m_rankedUserLocker.lock();
+	RankedUsers::iterator rank = std::find_if(this->m_rankedUsers.begin(), this->m_rankedUsers.end(), [&onlineUser](HUser perUser) {
+		return perUser->username.compare(onlineUser->username);
+	});
+	(*rank)->numberOfPokemens = onlineUser->numberOfPokemens;
+	(*rank)->numberOfPokemens = onlineUser->tops;
+	this->m_rankedUserLocker.unlock();
+
+	/* 向其他所有在线用户发送更新排行榜的通知 */
+	this->_OnRenewRanklistCallBack_(onlineUser);
+}
+
+/// <summary>
+/// 投递出境数据包
+/// </summary>
+/// <param name="onlineUser"></param>
+/// <param name="sendPacket"></param>
+/// <returns></returns>
 bool Server::_SendPacket_(HOnlineUser onlineUser, const Packet& sendPacket)
 {
 	try
 	{
-		/* 可复用IO资源 */
 		LPPER_IO_OPERATION_DATA sendIO = new PER_IO_OPERATION_DATA();
-		onlineUser->IncIOCounter();
+		onlineUser->IncIOSendCounter();
 
 		DWORD sendBytes;
 		ZeroMemory(&(sendIO->overlapped), sizeof(OVERLAPPED));
@@ -1000,6 +1482,46 @@ bool Server::_SendPacket_(HOnlineUser onlineUser, const Packet& sendPacket)
 	}
 }
 
+/// <summary>
+/// 接收入境数据包
+/// </summary>
+/// <param name="onlineUser"></param>
+/// <returns></returns>
+bool Server::_RecvPacket_(HOnlineUser onlineUser)
+{
+	try
+	{
+		/* 可复用IO资源 */
+		LPPER_IO_OPERATION_DATA recvIO = new PER_IO_OPERATION_DATA();
+		onlineUser->IncIORecvCounter();
+
+		ZeroMemory(&(recvIO->overlapped), sizeof(OVERLAPPED));
+		recvIO->dataBuf.len = DATA_BUFSIZE;
+		recvIO->dataBuf.buf = recvIO->buffer;
+		recvIO->opType = OPERATION_TYPE::RECV_POSTED;
+		DWORD flags = 0;
+		DWORD recvBytes;
+		if (WSARecv(onlineUser->m_client, &(recvIO->dataBuf), 1, &recvBytes, &flags,
+			&(recvIO->overlapped), NULL) == SOCKET_ERROR)
+		{
+			if (WSAGetLastError() != ERROR_IO_PENDING)
+			{
+				this->_OnConnectionLostCallBack_(nullptr, recvIO);
+				throw std::exception("网络异常。\n");
+			}
+		}
+		return true;
+	}
+	catch (const std::exception& e)
+	{
+		fprintf(stdout, "%s异常码：%d\n", e.what(), WSAGetLastError());
+		return false;
+	}
+}
+
+/// <summary>
+/// 工作线程
+/// </summary>
 void Server::_WorkerThread_()
 {
 	DWORD bytesTransferred; // 数据传输的字节数
@@ -1011,7 +1533,6 @@ void Server::_WorkerThread_()
 
 	Packet recvPacket;
 	Packet sendPacket;
-
 	while (!this->m_errorOccured && this->m_isServerOn)
 	{
 		perClient = nullptr;
@@ -1040,14 +1561,24 @@ void Server::_WorkerThread_()
 				{
 				case OPERATION_TYPE::RECV_POSTED:
 				{
-					this->m_onlineUserLocker.lock();
-					this->m_onlineUsers[userId]->DecIOCounter();
-					this->m_onlineUserLocker.unlock();
+					printf("收到数据包 RIO=%d SIO=%d IP=%s\n",
+						this->m_onlineUsers[userId]->ReadIORecvCounter(),
+						this->m_onlineUsers[userId]->ReadIOSendCounter(),
+						inet_ntoa(perClient->addr.sin_addr));
 
 					perIO->buffer[bytesTransferred] = 0x0;
 					std::memcpy((LPCH)&recvPacket, (LPCH)perIO->buffer, sizeof(Packet));
-					if (_AnalyzePacket_(perClient, recvPacket))
+
+					this->m_onlineUserLocker.lock();
+					int recvCounter = this->m_onlineUsers[userId]->ReadIORecvCounter();
+					this->m_onlineUserLocker.unlock();
+					if (_AnalyzePacket_(perClient, recvPacket)
+						|| recvCounter > 2)
 					{
+						this->m_onlineUserLocker.lock();
+						this->m_onlineUsers[userId]->DecIORecvCounter();
+						this->m_onlineUserLocker.unlock();
+
 						/* 释放掉该IO资源 */
 						delete perIO;
 						perIO = nullptr;
@@ -1097,10 +1628,16 @@ void Server::_WorkerThread_()
 					}
 					else
 					{
+						printf("发送数据包 RIO=%d SIO=%d IP=%s\n",
+							this->m_onlineUsers[userId]->ReadIORecvCounter(),
+							this->m_onlineUsers[userId]->ReadIOSendCounter(),
+							inet_ntoa(perClient->addr.sin_addr));
+
 						this->m_onlineUserLocker.lock();
-						printf("IO数目 = %d\n", this->m_onlineUsers[userId]->ReadIOCounter());
-						if (this->m_onlineUsers[userId]->ReadIOCounter() <= 2)
+						int recvCounter = this->m_onlineUsers[userId]->ReadIORecvCounter();
+						if (recvCounter < 2)
 						{
+							this->m_onlineUsers[userId]->IncIORecvCounter();
 							/* 预留该资源用于接收客户端的请求 */
 							ZeroMemory(&(perIO->overlapped), sizeof(OVERLAPPED));
 							perIO->dataBuf.len = DATA_BUFSIZE;
@@ -1121,7 +1658,7 @@ void Server::_WorkerThread_()
 						else
 						{
 							/* 释放掉该IO资源 */
-							this->m_onlineUsers[userId]->DecIOCounter();
+							this->m_onlineUsers[userId]->DecIOSendCounter();
 
 							delete perIO;
 							perIO = nullptr;
@@ -1139,6 +1676,9 @@ void Server::_WorkerThread_()
 	}
 }
 
+/// <summary>
+/// 接受连接线程
+/// </summary>
 void Server::_ServerAcceptThread_()
 {
 	SockaddrIn clientAddr;
@@ -1199,9 +1739,6 @@ void Server::_ServerAcceptThread_()
 			}
 
 			// 为I/O操作结构体分配内存空间
-			//if ((perIO = (LPPER_IO_OPERATION_DATA)GlobalAlloc(
-			//	GPTR, sizeof(PER_IO_OPERATION_DATA)
-			//)) == NULL)
 			if ((perIO = new PER_IO_OPERATION_DATA{ }) == nullptr)
 			{
 				throw std::exception("内存不足。\n");
@@ -1216,14 +1753,8 @@ void Server::_ServerAcceptThread_()
 
 			// 接收数据，放到PerIoData中
 			// 而PerIoData又通过工作线程中的ServerWorkerThread函数取出
-			if (WSARecv(client, &(perIO->dataBuf), 1, &recvBytes, &flags,
-				&(perIO->overlapped), NULL) == SOCKET_ERROR)
-			{
-				if (WSAGetLastError() != ERROR_IO_PENDING)
-				{
-					// throw std::exception("网络异常：投递入境包失败。\n");
-				}
-			}
+			WSARecv(client, &(perIO->dataBuf), 1, &recvBytes, &flags,
+				&(perIO->overlapped), NULL);
 		}
 	}
 	catch (const std::exception& e)
@@ -1239,27 +1770,3 @@ void Server::_ServerAcceptThread_()
 		this->m_isServerOn = false;
 	}
 }
-
-//void Server::_BeatThread_()
-//{
-//	Packet sendPacket;
-//	sendPacket.type = PacketType::INVALID;
-//
-//	std::vector<HOnlineUser> onlineUsers;
-//	while (!this->m_errorOccured && this->m_isServerOn)
-//	{
-//		Sleep(3000);
-//
-//		this->m_onlineUserLocker.lock();
-//		std::for_each(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
-//			[&onlineUsers](const std::pair<ULONG, HOnlineUser>& perUser) {
-//			onlineUsers.push_back(perUser.second);
-//		});
-//		this->m_onlineUserLocker.unlock();
-//
-//		for (auto& perUser : onlineUsers)
-//		{
-//			this->_SendPacket_(perUser, sendPacket);
-//		}
-//	}
-//}

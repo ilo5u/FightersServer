@@ -244,14 +244,6 @@ namespace Pokemen
 			return this->m_instance->GetParryratio();
 	}
 
-	int Pokemen::GetAnger() const
-	{
-		if (this->m_instance == nullptr)
-			throw std::exception("CPokemenManager is not implement.");
-		else
-			return this->m_instance->GetAnger();
-	}
-
 	int Pokemen::GetCareer() const
 	{
 		if (this->m_instance == nullptr)
@@ -292,42 +284,6 @@ namespace Pokemen
 			throw std::exception("CPokemenManager is not implement.");
 		else
 			return this->m_instance->GetExp();
-	}
-
-	bool Pokemen::Upgrade(int exp)
-	{
-		if (this->m_instance == nullptr)
-			throw std::exception("CPokemenManager is not implement.");
-		else
-			return this->m_instance->Upgrade(exp);
-	}
-
-	bool Pokemen::SetPrimarySkill(int skill)
-	{
-		if (skill < 0 || skill > 2)
-			return false;
-		switch (this->m_instance->GetType())
-		{
-		case PokemenType::MASTER:
-			static_cast<PMaster>(this->m_instance)->SetPrimarySkill(static_cast<Master::Skill::Type>(skill));
-			break;
-
-		case PokemenType::KNIGHT:
-			static_cast<PKnight>(this->m_instance)->SetPrimarySkill(static_cast<Knight::Skill::Type>(skill));
-			break;
-
-		case PokemenType::GUARDIAN:
-			static_cast<PGuardian>(this->m_instance)->SetPrimarySkill(static_cast<Guardian::Skill::Type>(skill));
-			break;
-
-		case PokemenType::ASSASSIN:
-			static_cast<PAssassin>(this->m_instance)->SetPrimarySkill(static_cast<Assassin::Skill::Type>(skill));
-			break;
-
-		default:
-			break;
-		}
-		return true;
 	}
 
 	bool Pokemen::Promote(int career)
@@ -374,32 +330,5 @@ namespace Pokemen
 			throw std::exception("CPokemenManager is not implement.");
 		else
 			return this->m_instance->GetType();
-	}
-
-	void Pokemen::SetMaxHpoints()
-	{
-		if (this->m_instance == nullptr)
-			throw std::exception("CPokemenManager is not implement.");
-		else
-			this->m_instance->SetMaxHpoints();
-	}
-
-	bool Pokemen::InState(BasePlayer::State nowState) const
-	{
-		if (this->m_instance == nullptr)
-			throw std::exception("CPokemenManager is not implement.");
-		else
-			return this->m_instance->InState(nowState);
-	}
-
-	/// <summary>
-	/// 
-	/// </summary>
-	std::string Pokemen::Attack(Pokemen& opponent)
-	{
-		if (this->m_instance == nullptr || opponent.m_instance == nullptr)
-			throw std::exception("CPokemenManager is not implement.");
-		else
-			return static_cast<PBasePlayer>(this->m_instance)->Attack(*static_cast<PBasePlayer>(opponent.m_instance));
 	}
 }

@@ -15,9 +15,11 @@ typedef std::list<Pokemen::Pokemen> Pokemens;
 
 class Server;
 
+/// <summary>
+/// 用户数据类型
+/// </summary>
 struct User
 {
-	/* 用户信息 */
 	String username;
 	int numberOfPokemens = 0;
 	int rounds = 0;
@@ -25,6 +27,10 @@ struct User
 	int tops = 0;
 };
 
+/// <summary>
+/// 在线用户类型
+/// 维护用户的连接
+/// </summary>
 class OnlineUser : private User
 {
 	friend Server;
@@ -36,6 +42,7 @@ public:
 
 public:
 	void   InsertAPokemen(const String& info);
+	String PokemenAt(int pokemenId) const;
 
 public:
 	ULONG  GetUserID() const;
@@ -43,18 +50,27 @@ public:
 	String GetUsername() const;
 
 public:
-	int ReadIOCounter();
-	void IncIOCounter();
-	void DecIOCounter();
+	/* IO重叠资源控制 */
+	int  ReadIORecvCounter();
+	void IncIORecvCounter();
+	void DecIORecvCounter();
+
+	int  ReadIOSendCounter();
+	void IncIOSendCounter();
+	void DecIOSendCounter();
 
 private:
 	/* 连接信息 */
 	const Socket m_client;
 	const SockaddrIn m_clientAddr;
 
-	Mutex m_ioLocker;
-	int   m_ioHandlerCount;
+	/* IO重叠资源计数 */
+	Mutex m_ioSendLocker;
+	int   m_ioSendCount;
+	Mutex m_ioRecvLocker;
+	int   m_ioRecvCount;
 
 	Pokemens m_pokemens;
 	bool     m_needRemove;
+	String   m_opponent; // 当前在线对战的敌方用户名
 };
