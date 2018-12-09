@@ -522,7 +522,7 @@ void Server::_OnLoginSuccessCallBack(HOnlineUser onlineUser, const Strings& user
 			this->m_rankedUserLocker.lock();
 			RankedUsers::iterator currentUser = std::find_if(this->m_rankedUsers.begin(), this->m_rankedUsers.end(),
 				[&onlineUser](const HUser perUser) {
-				return !perUser->username.compare(onlineUser->username);
+				return perUser->username == onlineUser->username;
 			});
 			this->m_rankedUserLocker.unlock();
 			(*currentUser)->numberOfPokemens = onlineUser->numberOfPokemens;
@@ -700,6 +700,12 @@ void Server::_DealWithPVEResult_(LPPER_HANDLE_DATA client, const char data[])
 		this->m_onlineUserLocker.unlock();
 		if (onlineUser != nullptr)
 		{
+			if (infos.size() != 17)
+			{
+				this->_RecvPacket_(onlineUser);
+				return;
+			}
+
 			++onlineUser->rounds;
 			if (infos[0].compare("F") == 0)
 				++onlineUser->wins;
@@ -758,7 +764,7 @@ void Server::_DealWithPVEResult_(LPPER_HANDLE_DATA client, const char data[])
 			this->m_rankedUserLocker.lock();
 			RankedUsers::iterator rankedUser = std::find_if(this->m_rankedUsers.begin(), this->m_rankedUsers.end(),
 				[&onlineUser](HUser perUser) {
-				return perUser->username.compare(onlineUser->username);
+				return perUser->username == onlineUser->username;
 			});
 			(*rankedUser)->rounds = onlineUser->rounds;
 			(*rankedUser)->wins = onlineUser->wins;
@@ -892,7 +898,7 @@ void Server::_DealWithAddPokemen_(LPPER_HANDLE_DATA client)
 			/* 更新用户列表中的数据 */
 			this->m_rankedUserLocker.lock();
 			(*std::find_if(this->m_rankedUsers.begin(), this->m_rankedUsers.end(), [&onlineUser](HUser perUser) {
-				return perUser->username.compare(onlineUser->username);
+				return perUser->username == onlineUser->username;
 			}))->numberOfPokemens = onlineUser->numberOfPokemens;
 			this->m_rankedUserLocker.unlock();
 
@@ -1019,6 +1025,13 @@ void Server::_DealWithPVPRequest_(LPPER_HANDLE_DATA client, const char data[])
 	Strings userInfos = SplitData(data);
 	if (onlineUser != nullptr)
 	{
+		printf("请求与%s对战 IP=%s\n", data, inet_ntoa(client->addr.sin_addr));
+		if (userInfos.size() == 0)
+		{ /* 无效数据包 */
+			this->_RecvPacket_(onlineUser);
+			return;
+		}
+
 		bool existed = false;
 		this->m_onlineUserLocker.lock();
 		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
@@ -1140,6 +1153,12 @@ void Server::_DealWithPVPAccept_(LPPER_HANDLE_DATA client, const char data[])
 	Strings userInfos = SplitData(data);
 	if (onlineUser != nullptr)
 	{
+		if (userInfos.size() == 0)
+		{ /* 无效数据包 */
+			this->_RecvPacket_(onlineUser);
+			return;
+		}
+
 		bool existed = false;
 		this->m_onlineUserLocker.lock();
 		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
@@ -1186,16 +1205,21 @@ void Server::_DealWithPVPBusy_(LPPER_HANDLE_DATA client, const char data[])
 	this->m_onlineUserLocker.unlock();
 
 	Packet sendPacket;
-	Strings userInfos = SplitData(data);
 	if (onlineUser != nullptr)
 	{
+		if (onlineUser->GetOpponent().empty())
+		{
+			this->_RecvPacket_(onlineUser);
+			return;
+		}
+
 		bool existed = false;
 		this->m_onlineUserLocker.lock();
 		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
-			[&userInfos](const std::pair<ULONG, HOnlineUser>& perUser) {
+			[&onlineUser](const std::pair<ULONG, HOnlineUser>& perUser) {
 			if (perUser.second != nullptr)
 			{
-				return perUser.second->username == userInfos[0];
+				return perUser.second->username == onlineUser->GetOpponent();
 			}
 			else
 			{
@@ -1237,6 +1261,12 @@ void Server::_DealWithPVPBattle_(LPPER_HANDLE_DATA client, const char data[])
 	Strings userInfos = SplitData(data);
 	if (onlineUser != nullptr)
 	{
+		if (userInfos.size() == 0)
+		{
+			this->_RecvPacket_(onlineUser);
+			return;
+		}
+
 		bool existed = false;
 		this->m_onlineUserLocker.lock();
 		OnlineUsers::iterator oppoent = std::find_if(this->m_onlineUsers.begin(), this->m_onlineUsers.end(),
@@ -1604,7 +1634,7 @@ void Server::_OnRemovePokemenCallBack_(HOnlineUser onlineUser, int removeId)
 	/* 更新用户列表数据 */
 	this->m_rankedUserLocker.lock();
 	RankedUsers::iterator rank = std::find_if(this->m_rankedUsers.begin(), this->m_rankedUsers.end(), [&onlineUser](HUser perUser) {
-		return perUser->username.compare(onlineUser->username);
+		return perUser->username == onlineUser->username;
 	});
 	(*rank)->numberOfPokemens = onlineUser->numberOfPokemens;
 	(*rank)->numberOfPokemens = onlineUser->tops;
