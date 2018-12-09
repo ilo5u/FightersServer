@@ -1067,6 +1067,7 @@ void Server::_DealWithPVPRequest_(LPPER_HANDLE_DATA client, const char data[])
 				sprintf(sendPacket.data, "%s", onlineUser->username.c_str());
 
 				this->_SendPacket_(oppoent->second, sendPacket);
+				oppoent->second->m_opponent = onlineUser->username;
 			}
 		}
 		this->_RecvPacket_(onlineUser);
@@ -1187,8 +1188,14 @@ void Server::_DealWithPVPAccept_(LPPER_HANDLE_DATA client, const char data[])
 			sprintf(sendPacket.data, "%s", pokemenInfos.c_str());
 
 			this->_SendPacket_(oppoent->second, sendPacket);
+			oppoent->second->m_opponent = onlineUser->username;
 		}
-		this->_RecvPacket_(onlineUser);
+		else
+		{
+			sendPacket.type = PacketType::PVP_CANCEL;
+			this->_SendPacket_(onlineUser, sendPacket);
+			onlineUser->m_opponent.clear();
+		}
 	}
 }
 
@@ -1239,6 +1246,7 @@ void Server::_DealWithPVPBusy_(LPPER_HANDLE_DATA client, const char data[])
 			sprintf(sendPacket.data, "%s", onlineUser->username.c_str());
 
 			this->_SendPacket_(oppoent->second, sendPacket);
+			oppoent->second->m_opponent.clear();
 		}
 		onlineUser->m_opponent.clear();
 		this->_RecvPacket_(onlineUser);
@@ -1295,7 +1303,12 @@ void Server::_DealWithPVPBattle_(LPPER_HANDLE_DATA client, const char data[])
 
 			this->_SendPacket_(oppoent->second, sendPacket);
 		}
-		this->_RecvPacket_(onlineUser);
+		else
+		{
+			sendPacket.type = PacketType::PVP_CANCEL;
+			this->_SendPacket_(onlineUser, sendPacket);
+			onlineUser->m_opponent.clear();
+		}
 	}
 }
 
@@ -1340,7 +1353,12 @@ void Server::_DealWithPVPMessage_(LPPER_HANDLE_DATA client, const char data[])
 			sprintf(sendPacket.data, "%s", data);
 			this->_SendPacket_(oppoent->second, sendPacket);
 		}
-		this->_RecvPacket_(onlineUser);
+		else
+		{
+			sendPacket.type = PacketType::PVP_CANCEL;
+			this->_SendPacket_(onlineUser, sendPacket);
+			onlineUser->m_opponent.clear();
+		}
 	}
 }
 
@@ -1389,7 +1407,12 @@ void Server::_DealWithPVPResult_(LPPER_HANDLE_DATA client, const char data[])
 			onlineUser->m_opponent.clear();
 			oppoent->second->m_opponent.clear();
 		}
-		this->_RecvPacket_(onlineUser);
+		else
+		{
+			sendPacket.type = PacketType::PVP_CANCEL;
+			this->_SendPacket_(onlineUser, sendPacket);
+			onlineUser->m_opponent.clear();
+		}
 	}
 }
 
