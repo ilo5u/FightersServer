@@ -71,27 +71,28 @@ namespace Pokemen
 		if (this->m_career.type == Career::Type::Normal)
 		{
 			this->m_career.type = career;
+			int bonus = (this->m_property.m_level - 8) * 10 + 100;
 			switch (this->m_career.type)
 			{
 			case Career::Type::Yodian:
 			{
 				this->m_property.m_attack
 					+= ConvertValueByPercent(this->m_property.m_attack, Career::Yodian::damageDecIndex);
-				this->m_property.m_interval 
+				this->m_property.m_interval
 					+= Career::Yodian::intervalDecIndex;
-				this->m_property.m_hpoints 
+				this->m_property.m_hpoints
 					+= ConvertValueByPercent(this->m_property.m_hpoints, Career::Yodian::hpointsDecIndex);
-				this->m_property.m_agility 
-					+= ConvertValueByPercent(this->m_property.m_agility, Career::Yodian::agilityIncIndex);
+				this->m_property.m_agility
+					+= ConvertValueByPercent(ConvertValueByPercent(this->m_property.m_agility, Career::Yodian::agilityIncIndex), bonus);
 			}
 			break;
 
 			case Career::Type::Michelle:
 			{
-				this->m_property.m_attack 
-					+= ConvertValueByPercent(this->m_property.m_attack, Career::Michelle::damageIncIndex);
+				this->m_property.m_attack
+					+= ConvertValueByPercent(ConvertValueByPercent(this->m_property.m_attack, Career::Michelle::damageIncIndex), bonus);
 				this->m_property.m_defense
-					+= ConvertValueByPercent(this->m_property.m_defense, Career::Michelle::defenseIncIndex);
+					+= ConvertValueByPercent(ConvertValueByPercent(this->m_property.m_defense, Career::Michelle::defenseIncIndex), bonus);
 			}
 			break;
 

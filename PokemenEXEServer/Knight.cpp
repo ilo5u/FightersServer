@@ -71,12 +71,13 @@ namespace Pokemen
 		if (this->m_career.type == Career::Type::Normal)
 		{
 			this->m_career.type = career;
+			int bonus = (this->m_property.m_level - 8) * 10 + 100;
 			switch (this->m_career.type)
 			{
 			case Career::Type::Ares:
 			{
-				this->m_property.m_attack 
-					+= ConvertValueByPercent(this->m_property.m_attack, Career::Ares::damageIncIndex);
+				this->m_property.m_attack
+					+= ConvertValueByPercent(ConvertValueByPercent(this->m_property.m_attack, Career::Ares::damageIncIndex), bonus);
 				this->m_property.m_interval
 					+= Career::Ares::intervalIncIndex;
 			}
@@ -85,8 +86,8 @@ namespace Pokemen
 			case Career::Type::Athena:
 			{
 				this->m_property.m_defense
-					+= ConvertValueByPercent(this->m_property.m_defense, Career::Athena::defenseIncIndex);
-				this->m_property.m_attack 
+					+= ConvertValueByPercent(ConvertValueByPercent(this->m_property.m_defense, Career::Athena::defenseIncIndex), bonus);
+				this->m_property.m_attack
 					+= ConvertValueByPercent(this->m_property.m_attack, Career::Athena::damageDecIndex);
 				this->m_property.m_interval
 					+= Career::Athena::intervalDecIndex;

@@ -71,22 +71,23 @@ namespace Pokemen
 		if (this->m_career.type == Career::Type::Normal)
 		{
 			this->m_career.type = career;
+			int bonus = (this->m_property.m_level - 8) * 10 + 100;
 			switch (this->m_career.type)
 			{
 			case Career::Type::Paladin:
 			{
-				this->m_property.m_defense 
-					+= ConvertValueByPercent(this->m_property.m_defense, Career::Paladin::defenseIncIndex);
+				this->m_property.m_defense
+					+= ConvertValueByPercent(ConvertValueByPercent(this->m_property.m_defense, Career::Paladin::defenseIncIndex), bonus);
 				this->m_property.m_attack
 					+= ConvertValueByPercent(this->m_property.m_attack, Career::Paladin::damageDecIndex);
-				this->m_property.m_agility 
+				this->m_property.m_agility
 					+= (this->m_property.m_agility, Career::Paladin::agilityDecIndex);
 			}
 			break;
 
 			case Career::Type::Joker:
 			{
-				this->m_property.m_defense 
+				this->m_property.m_defense
 					+= (this->m_property.m_defense, Career::Joker::defenseDecIndex);
 			}
 			break;

@@ -65,19 +65,20 @@ namespace Pokemen
 		if (this->m_career.type == Career::Type::Normal)
 		{
 			this->m_career.type = career;
+			int bonus = (this->m_property.m_level - 8) * 10 + 100;
 			switch (this->m_career.type)
 			{
 			case Career::Type::GreatMasterOfLight:
 			{
 				this->m_property.m_attack += ConvertValueByPercent(this->m_property.m_attack, Career::Lighter::damageDecIndex);
-				this->m_property.m_hpoints += ConvertValueByPercent(this->m_property.m_hpoints, Career::Lighter::hpointsIncIndex);
+				this->m_property.m_hpoints += ConvertValueByPercent(ConvertValueByPercent(this->m_property.m_hpoints, Career::Lighter::hpointsIncIndex), bonus);
 			}
 			break;
 
 			case Career::Type::GreatMasterOfDark:
 			{
 				this->m_property.m_defense += ConvertValueByPercent(this->m_property.m_defense, Career::Darker::defenseDecIndex);
-				this->m_property.m_attack += ConvertValueByPercent(this->m_property.m_attack, Career::Darker::damageIncIndex);
+				this->m_property.m_attack += ConvertValueByPercent(ConvertValueByPercent(this->m_property.m_attack, Career::Darker::damageIncIndex), bonus);
 			}
 			break;
 

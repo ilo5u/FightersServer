@@ -1196,6 +1196,7 @@ void Server::_DealWithPVPAccept_(LPPER_HANDLE_DATA client, const char data[])
 			this->_SendPacket_(onlineUser, sendPacket);
 			onlineUser->m_opponent.clear();
 		}
+		this->_RecvPacket_(onlineUser);
 	}
 }
 
@@ -1309,6 +1310,7 @@ void Server::_DealWithPVPBattle_(LPPER_HANDLE_DATA client, const char data[])
 			this->_SendPacket_(onlineUser, sendPacket);
 			onlineUser->m_opponent.clear();
 		}
+		this->_RecvPacket_(onlineUser);
 	}
 }
 
@@ -1359,6 +1361,7 @@ void Server::_DealWithPVPMessage_(LPPER_HANDLE_DATA client, const char data[])
 			this->_SendPacket_(onlineUser, sendPacket);
 			onlineUser->m_opponent.clear();
 		}
+		this->_RecvPacket_(onlineUser);
 	}
 }
 
@@ -1404,15 +1407,10 @@ void Server::_DealWithPVPResult_(LPPER_HANDLE_DATA client, const char data[])
 			this->_SendPacket_(oppoent->second, sendPacket);
 
 			/* 断开连接信息 */
-			onlineUser->m_opponent.clear();
 			oppoent->second->m_opponent.clear();
 		}
-		else
-		{
-			sendPacket.type = PacketType::PVP_CANCEL;
-			this->_SendPacket_(onlineUser, sendPacket);
-			onlineUser->m_opponent.clear();
-		}
+		onlineUser->m_opponent.clear();
+		this->_RecvPacket_(onlineUser);
 	}
 }
 
@@ -1814,15 +1812,16 @@ void Server::_WorkerThread_()
 					{
 						int recvCounter = onlineUser->ReadIORecvCounter();
 
-						if (_AnalyzePacket_(perClient, recvPacket))
+						if (_AnalyzePacket_(perClient, recvPacket) 
+							|| recvCounter < 3)
 						{
 							this->m_onlineUserLocker.lock();
 							HOnlineUser onlineUser = this->m_onlineUsers[userId];
+							this->m_onlineUserLocker.unlock();
 							if (onlineUser != nullptr)
 							{
 								onlineUser->DecIORecvCounter();
 							}
-							this->m_onlineUserLocker.unlock();
 
 							/* 释放掉该IO资源 */
 							delete perIO;
