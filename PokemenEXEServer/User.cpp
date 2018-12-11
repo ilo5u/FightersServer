@@ -10,7 +10,7 @@ OnlineUser::OnlineUser(const Socket& client, const SockaddrIn& clientAddr) :
 	m_client(client), m_clientAddr(clientAddr),
 	m_ioSendLocker(), m_ioRecvLocker(),
 	m_ioSendCount(0x00), m_ioRecvCount(0x01),
-	m_pokemens(), m_needRemove(false)
+	m_pokemens(), m_needRemove(false), m_opponent()
 {
 }
 

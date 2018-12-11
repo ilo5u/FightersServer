@@ -1813,7 +1813,7 @@ void Server::_WorkerThread_()
 						int recvCounter = onlineUser->ReadIORecvCounter();
 
 						if (_AnalyzePacket_(perClient, recvPacket) 
-							|| recvCounter < 3)
+							|| recvCounter > 3)
 						{
 							this->m_onlineUserLocker.lock();
 							HOnlineUser onlineUser = this->m_onlineUsers[userId];
@@ -1898,7 +1898,7 @@ void Server::_WorkerThread_()
 						{
 							onlineUser->DecIOSendCounter();
 							int recvCounter = onlineUser->ReadIORecvCounter();
-							if (recvCounter < 2)
+							if (recvCounter < 3)
 							{
 								onlineUser->IncIORecvCounter();
 								/* 预留该资源用于接收客户端的请求 */
