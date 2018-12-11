@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "Database.h"
 
-#define DEBUG
+//#define DEBUG
 
 typedef Packet::Type PacketType;
 
@@ -242,7 +242,7 @@ bool Server::_InitNetwork_()
 	return true;
 }
 
-#define LOAD_ALL_USERS_QUERY "select name,numberOfPokemens,rounds,wins from users"
+#define LOAD_ALL_USERS_QUERY "select name,numberOfPokemens,rounds,wins,tops from users"
 /// <summary>
 /// 加载排行榜
 /// </summary>
@@ -251,7 +251,7 @@ void Server::_LoadRankedUsers_()
 	char queryString[BUFSIZ];
 	sprintf(queryString, LOAD_ALL_USERS_QUERY);
 
-	Strings queryResult = this->m_hDatabase->Select(queryString, 4);
+	Strings queryResult = this->m_hDatabase->Select(queryString, 5);
 	this->m_rankedUserLocker.lock();
 	for (const auto& userInfos : queryResult)
 	{
@@ -263,7 +263,8 @@ void Server::_LoadRankedUsers_()
 					elems[0],
 					std::atoi(elems[1].c_str()),
 					std::atoi(elems[2].c_str()),
-					std::atoi(elems[3].c_str())
+					std::atoi(elems[3].c_str()),
+					std::atoi(elems[4].c_str())
 				}
 			);
 		}
@@ -642,6 +643,8 @@ void Server::_DealWithGetOnlineUsers_(LPPER_HANDLE_DATA client, const char data[
 			int  cnt = 0;
 			sendPacket.type = PacketType::SET_ONLINE_USERS;
 			bool hasSend = false;
+
+			this->m_onlineUserLocker.lock();
 			for (const auto& otherUser : this->m_onlineUsers)
 			{ /* 将最多20个用户分为一组打包发送 */
 				if (otherUser.first != userId
@@ -662,6 +665,8 @@ void Server::_DealWithGetOnlineUsers_(LPPER_HANDLE_DATA client, const char data[
 					}
 				}
 			}
+			this->m_onlineUserLocker.unlock();
+
 			if (cnt > 0)
 			{
 				sprintf(sendPacket.data, "%d\n%s", cnt, szUserNames);
@@ -1425,11 +1430,13 @@ void Server::_OnConnectionLostCallBack_(LPPER_HANDLE_DATA lostClient, LPPER_IO_O
 	Packet sendPacket;
 
 	this->m_onlineUserLocker.lock();
+	HOnlineUser lostUser = this->m_onlineUsers[lostId];
+	this->m_onlineUserLocker.unlock();
+
 	this->m_releaseLocker.lock();
 	if (this->m_needRelease[lostClient->client])
 	{
 		/* 通知其他用户更新在线用户列表 */
-		HOnlineUser lostUser = this->m_onlineUsers[lostId];
 		if (lostUser != nullptr)
 		{
 			printf("%s断开连接\n", inet_ntoa(lostClient->addr.sin_addr));
@@ -1462,7 +1469,7 @@ void Server::_OnConnectionLostCallBack_(LPPER_HANDLE_DATA lostClient, LPPER_IO_O
 		{
 			/* 断掉在线对战的另一方 */
 			sendPacket.type = PacketType::PVP_RESULT;
-			sprintf(sendPacket.data, "F\n0\n");
+			sprintf(sendPacket.data, "S\n0\n");
 			this->_SendPacket_(opponent->second, sendPacket);
 			opponent->second->m_opponent.clear();
 		}
@@ -1483,7 +1490,6 @@ void Server::_OnConnectionLostCallBack_(LPPER_HANDLE_DATA lostClient, LPPER_IO_O
 		delete lostIO;
 	}
 	this->m_releaseLocker.unlock();
-	this->m_onlineUserLocker.unlock();
 }
 
 /// <summary>
@@ -1599,7 +1605,7 @@ void Server::_OnRemovePokemenCallBack_(HOnlineUser onlineUser, int removeId)
 	sprintf(szQuery, REMOVE_POKEMEN_QUERY, pokemenId);
 	this->m_hDatabase->Delete(szQuery);
 
-	--onlineUser->numberOfPokemens;
+	onlineUser->numberOfPokemens--;
 	bool decOfTops = false;
 	onlineUser->m_pokemens.remove_if([&pokemenId, &decOfTops](const Pokemen::Pokemen& pokemen) {
 		if (pokemen.GetId() == pokemenId)
@@ -1612,7 +1618,7 @@ void Server::_OnRemovePokemenCallBack_(HOnlineUser onlineUser, int removeId)
 	});
 	if (decOfTops == true)
 	{ /* 减少一个高阶精灵 */
-		--onlineUser->tops;
+		onlineUser->tops--;
 	}
 
 	if (onlineUser->numberOfPokemens == 0)
@@ -1632,10 +1638,6 @@ void Server::_OnRemovePokemenCallBack_(HOnlineUser onlineUser, int removeId)
 		this->m_hDatabase->Insert(szQuery);
 
 		onlineUser->numberOfPokemens = 1;
-		sprintf(szQuery, "update users set numberOfPokemens=%d where name='%s'",
-			onlineUser->numberOfPokemens, onlineUser->username.c_str()
-		);
-		this->m_hDatabase->Update(szQuery);
 
 		if (removeId != 0)
 		{
@@ -1652,13 +1654,18 @@ void Server::_OnRemovePokemenCallBack_(HOnlineUser onlineUser, int removeId)
 		}
 	}
 
+	sprintf(szQuery, "update users set numberOfPokemens=%d,tops=%d where name='%s'",
+		onlineUser->numberOfPokemens, onlineUser->tops, onlineUser->username.c_str()
+	);
+	this->m_hDatabase->Update(szQuery);
+
 	/* 更新用户列表数据 */
 	this->m_rankedUserLocker.lock();
 	RankedUsers::iterator rank = std::find_if(this->m_rankedUsers.begin(), this->m_rankedUsers.end(), [&onlineUser](HUser perUser) {
 		return perUser->username == onlineUser->username;
 	});
 	(*rank)->numberOfPokemens = onlineUser->numberOfPokemens;
-	(*rank)->numberOfPokemens = onlineUser->tops;
+	(*rank)->tops = onlineUser->tops;
 	this->m_rankedUserLocker.unlock();
 
 	/* 向其他所有在线用户发送更新排行榜的通知 */
@@ -1715,6 +1722,9 @@ bool Server::_SendPacket_(HOnlineUser onlineUser, const Packet& sendPacket)
 bool Server::_RecvPacket_(HOnlineUser onlineUser)
 {
 	if (onlineUser == nullptr)
+		return false;
+
+	if (onlineUser->ReadIORecvCounter() > 3)
 		return false;
 
 	try
@@ -1812,7 +1822,7 @@ void Server::_WorkerThread_()
 					{
 						int recvCounter = onlineUser->ReadIORecvCounter();
 
-						if (_AnalyzePacket_(perClient, recvPacket) 
+						if (_AnalyzePacket_(perClient, recvPacket)
 							|| recvCounter > 3)
 						{
 							this->m_onlineUserLocker.lock();

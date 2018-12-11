@@ -45,6 +45,16 @@ void OnlineUser::InsertAPokemen(const String& info)
 {
 	Strings pokemenInfos = SplitData(info.c_str());
 
+	int pokemenId = std::atoi(pokemenInfos[0].c_str());
+
+	if (std::find_if(this->m_pokemens.begin(), this->m_pokemens.end(),
+		[&pokemenId](const Pokemen::Pokemen& pokemen) {
+		return pokemen.GetId() == pokemenId;
+	}) != this->m_pokemens.end())
+	{
+		return;
+	}
+
 	// 获取小精灵所有信息
 	Pokemen::Pokemen pokemen{
 		{
