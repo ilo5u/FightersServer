@@ -71,6 +71,7 @@ private:
 	Mutex m_ioRecvLocker;
 	int   m_ioRecvCount;
 
+	Mutex m_pokemenLocker;
 	Pokemens m_pokemens;
 	bool     m_needRemove;
 	String   m_opponent; // 当前在线对战的敌方用户名

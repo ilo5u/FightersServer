@@ -10,7 +10,7 @@ OnlineUser::OnlineUser(const Socket& client, const SockaddrIn& clientAddr) :
 	m_client(client), m_clientAddr(clientAddr),
 	m_ioSendLocker(), m_ioRecvLocker(),
 	m_ioSendCount(0x00), m_ioRecvCount(0x01),
-	m_pokemens(), m_needRemove(false), m_opponent()
+	m_pokemenLocker(), m_pokemens(), m_needRemove(false), m_opponent()
 {
 }
 
@@ -43,6 +43,8 @@ static Strings SplitData(const char data[])
 // 仅由服务器线程调用
 void OnlineUser::InsertAPokemen(const String& info)
 {
+	m_pokemenLocker.lock();
+
 	Strings pokemenInfos = SplitData(info.c_str());
 
 	int pokemenId = std::atoi(pokemenInfos[0].c_str());
@@ -75,6 +77,8 @@ void OnlineUser::InsertAPokemen(const String& info)
 		std::atoi(pokemenInfos[11].c_str())
 	};
 	m_pokemens.push_back(std::move(pokemen));
+
+	m_pokemenLocker.unlock();
 }
 
 #define ALL_POKEMEN_PROPERTIES "%d,%d,%s,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d"
