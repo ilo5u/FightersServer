@@ -307,6 +307,10 @@ bool Server::_AnalyzePacket_(LPPER_HANDLE_DATA client, const Packet& recv)
 		_DealWithPromotePokemen_(client, recv.data);
 		return true;
 
+	case PacketType::UPDATE_POKEMENS:
+		_DealWithUpdatePokemens_(client);
+		return true;
+
 	case PacketType::ADD_POKEMEN:
 		_DealWithAddPokemen_(client);
 		return true;
@@ -617,6 +621,25 @@ void Server::_DealWithLogout_(LPPER_HANDLE_DATA client)
 	catch (const std::exception& e)
 	{
 		printf("用户注销发生异常：%s IP=%s\n", e.what(), inet_ntoa(client->addr.sin_addr));
+	}
+}
+
+void Server::_DealWithUpdatePokemens_(LPPER_HANDLE_DATA client)
+{
+	int userId = client->addr.sin_addr.S_un.S_addr;
+	try
+	{
+		this->m_onlineUserLocker.lock();
+		HOnlineUser onlineUser = this->m_onlineUsers[userId];
+		this->m_onlineUserLocker.unlock();
+
+		if (onlineUser != nullptr)
+		{
+			this->_OnUpdatePokemensCallBack_(onlineUser);
+		}
+	}
+	catch (std::exception&)
+	{
 	}
 }
 

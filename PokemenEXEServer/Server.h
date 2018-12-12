@@ -85,6 +85,7 @@ private:
 	void _DealWithLogon_(LPPER_HANDLE_DATA client, const char data[]);
 	void _DealWithLogout_(LPPER_HANDLE_DATA client);
 
+	void _DealWithUpdatePokemens_(LPPER_HANDLE_DATA client);
 	void _DealWithGetOnlineUsers_(LPPER_HANDLE_DATA client, const char data[]);
 	void _DealWithPVEResult_(LPPER_HANDLE_DATA client, const char data[]);
 	void _DealWithPromotePokemen_(LPPER_HANDLE_DATA client, const char data[]);
